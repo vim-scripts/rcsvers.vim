@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2004/06/23 10:11:57 $
-"      Version: $Revision: 1.20 $
+"  Last Change: $Date: 2004/07/15 10:11:57 $
+"      Version: $Revision: 1.21 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -40,9 +40,9 @@
 "                               revision under the cursor (works only in
 "                               the revision log window)
 "
-"               <Leader>rci     This will create an initial RCS file. Useful
-"                               when you have the script set to save only when
-"                               a previous RCS file exists.
+"               <Leader>rci     This will create an initial RCS file. Only
+"                               necessary when you have the script set to 
+"                               save only when a previous RCS file exists.
 "
 "               <Leader>older   does a diff with the previous version
 "
@@ -86,6 +86,8 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.21  Remember the last position in the rlog window. Rename RevisionLog
+"       window to avoid collisions
 "
 " 1.20  Added a mapping to create an initial RCS file. Useful when the script
 "       is set to save only when a previous RCS file exists. see
@@ -165,15 +167,19 @@
 "------------------------------------------------------------------------------
 "
 " <Leader>rlog
-"       This is the default key map to display the revision log. search
+"       This is the default key map to display the revision log. Search
+"       for 'key' to override this key.
+"
+" <Leader>rci  
+"       This is the default key map to create an initial RCS file. Search 
 "       for 'key' to override this key.
 "
 " <Leader>older
-"       This is the default key map to display the previous revision. search
+"       This is the default key map to display the previous revision. Search
 "       for 'key' to override this key.
 "
 " <Leader>newer
-"       This is the default key map to display the next revision. search
+"       This is the default key map to display the next revision. Search
 "       for 'key' to override this key.
 "
 " g:rvCompareProgram
@@ -762,12 +768,32 @@ endfunction
 " Function: Display the revision log {{{1
 "------------------------------------------------------------------------------
 function! s:DisplayLog()
+    " get the position in the rlog window, get it from a buffer-level variable
+    if !exists("b:rvlastlogpos")
+        "if no b:lastlogpos, use the current revision
+        let b:rvlastlogpos = 0
+    endif
+    let l:rvlastlogpos = b:rvlastlogpos
+
     call s:RcsVersSaveSettings()
+
     "if the log or a version diff is already displayed, delete it and quit
     "(so that this function will work as a toggle)
     if (exists("s:child_bufnr"))
-         silent exec "bd! " . s:child_bufnr
-         return
+		if (match(bufname(s:child_bufnr),"rcsversRevisionLog")!=-1)
+            "get the revision from the rlog window
+            exec bufwinnr(s:child_bufnr) . "wincmd w"
+            let l:rvlastlogpos = substitute(getline("."),
+                \"^\\([.0-9]\\+\\).\\+", "\\1", "g")
+		else
+			"get the revision from the buffer-variable in the parent 
+            sil! exec bufwinnr(s:parent_bufnr) . "wincmd w"
+			let l:rvlastlogpos = b:rvlastlogpos
+		endif
+        silent exec "bd! " . s:child_bufnr
+        "remember the current position in the rlog window for each buffer
+        let b:rvlastlogpos = l:rvlastlogpos
+        return
     endif
     let l:suffix = s:CreateSuffix()
 
@@ -792,9 +818,9 @@ function! s:DisplayLog()
     let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " This is the name of the buffer that holds the revision log list.
-    let l:bufferName = g:rvTempDir.g:rvDirSeparator."RevisionLog"
+    let l:bufferName = g:rvTempDir.g:rvDirSeparator."rcsversRevisionLog"
 
-    " If a buffer with the name RevisionLog exists, delete it.
+    " If a buffer with the name rcsversRevisionLog exists, delete it.
     if bufexists("l:bufferName")
     silent exe 'bd! "'.l:bufferName.'"'
     endif
@@ -843,8 +869,9 @@ function! s:DisplayLog()
         " Remove default "vim" descriptions or rvDescription
         sil! exe ":%s/\\s".g:rvDescription."$//g"
 
-        " Go to about the beginning of the buffer.
-        sil! exe "normal 1Gj"
+        " Go to the remembered position in the rlog window.
+        sil! exe "normal 1G"
+		sil! exe "/^".l:rvlastlogpos.":"
 
     endif
 
@@ -1005,6 +1032,10 @@ function! s:CompareFiles(revision)
         let s:parent_bufnr = l:parent_bufnr
         let s:child_bufnr = l:child_bufnr
         let s:revision = a:revision
+		
+        "remember the current position in the rlog window for each buffer
+        let b:rvlastlogpos = s:revision
+
     endif
 
 endfunction
