@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/12/09 14:18:35 $
-"      Version: $Revision: 1.16 $
+"  Last Change: $Date: 2004/01/27 11:17:15 $
+"      Version: $Revision: 1.17 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -44,8 +44,18 @@
 "
 "               <Leader>newer   does a diff with the next version
 "
-" You probably want to map these to something easier to type, like a function
-" key
+" You probably want to map these in your vimrc file to something easier to type,
+" like a function key.  Do it like this:
+""re-map rcsvers.vim keys
+"map <F8> \rlog
+"map <F5> \older
+"map <F6> \newer
+"
+" You may need to set the following shell or environment variables:
+" user name:
+"        LOGNAME=myusername
+" timezone:  (example is for EST)
+"        TZ=GMT+5
 "
 "------------------------------------------------------------------------------
 " Please send me any bugs you find, so I can keep the script up to date.
@@ -56,21 +66,23 @@
 " Vim plugin for automatically saving backup versions in rcs whenever a file
 " is saved.
 "
-" What's RCS? See http://www.gnu.org/software/rcs/rcs.html
+" What's RCS? It's a set of programs used for version control of files.
+" See http://www.gnu.org/software/rcs/rcs.html
+"
+" The rcs programs are freely available at http://www.cs.purdue.edu/homes/trinkle/RCS/
 "
 " Be careful if you really use RCS as your production file control, it will
 " add versions like crazy. See options below for work arounds.
-"
-" If you're using Microsoft Windows, then the rcs programs are available by
-" installing WinCVS (http://www.wincvs.org), and putting the wincvs directory
-" in your path. (WinCVS 1.2 or earlier only, they took out the programs as of
-" 1.3)
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this
 " (vimscript #41).
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.17  Added the option to save an RCS version only when there is an RCS
+"       directory in the files directory. See rvSaveIfRCSExists option.
+"       (from Camillo Särs)
 "
 " 1.16  Save some settings that "set diff" mangles, and different check for
 "       &cp
@@ -198,7 +210,18 @@
 "           2 = Save in current directory (same as the original file)
 "
 "       Note: If using g:rvSaveDirectoryType = 2 make sure you use
-"             a suffix or the script might overwrite your file.
+"             a suffix (see g:rvSaveSuffixType) or the script might overwrite
+"             your file.
+"
+" g:rvSaveIfRCSExists
+"       This specifies that RCS files will only be saved if the RCS directory
+"       (in the current directory) already exists.  This prevents new RCS
+"       directories from being created.
+"           0 = Create new RCS directories when needed
+"           1 = Only save RCS files if the RCS directory already exists.
+"
+"       Note: If using g:rvSaveDirectoryType = 2 or 1, this setting has no
+"             effect.
 "
 " g:rvSaveDirectoryName
 "       This specifies the name of the directory where the RCS files will
@@ -219,10 +242,10 @@
 "           let g:rvSaveSuffixType = x
 "       where 'x' is one of the following
 "           0 = No suffix.
-"           1 = Use the ',v' suffix
+"           1 = Use the standard ',v' suffix
 "           2 = Use a unique suffix (take the full path and changes the
 "               directory separators to underscores)
-"           3 = use a unique suffix with a ',v' Appended to the end.
+"           3 = use a unique suffix with a ',v' appended to the end.
 "           4 = User defined suffix.
 "       If you select type number 4 the default is ',v'. To override use:
 "           let g:rvSaveSuffix = 'xxx'
@@ -323,7 +346,7 @@ if !exists('g:rvRlogOptions')
     let g:rvRlogOptions = ""
 endif
 
-" Set initial description and version message.
+" Set initial description and version message
 "------------------------------------------------------------------------------
 if !exists('g:rvDescription')
     let g:rvDescription = "vim"
@@ -384,6 +407,12 @@ if !exists('g:rvSaveDirectoryType')
     let g:rvSaveDirectoryType = 0
 endif
 
+" Only save if RCS already exists
+" -----------------------------------------------------------------------------
+if !exists('g:rvSaveIfRCSExists')
+    let g:rvSaveIfRCSExists = 0
+endif
+
 " Set the suffix type
 "------------------------------------------------------------------------------
 if !exists('g:rvSaveSuffixType')
@@ -439,7 +468,7 @@ function! s:bufunload()
         if s:save_scrollbind == 0
             silent exec ":set noscrollbind"
         else
-            silent exec ":set scrollbind" 
+            silent exec ":set scrollbind"
         endif
         silent exec ":set scrollopt=" . s:save_scrollopt
         if s:save_wrap == 0
@@ -494,7 +523,7 @@ function! s:CreateSuffix()
         return ""
 
     elseif g:rvSaveSuffixType == 1
-        "1 = Use the ',v" suffix
+        "1 = Use the standard ',v' suffix
         return ",v"
 
     elseif g:rvSaveSuffixType == 2
@@ -502,13 +531,13 @@ function! s:CreateSuffix()
         return ",".expand("%:p:h:gs?\[:/ \\\\]?_?")
 
     elseif g:rvSaveSuffixType == 3
-        "3 = use a unique suffix with a ',v' Appended to the end.
+        "3 = use a unique suffix with a ',v' appended to the end.
         return ",".expand("%:p:h:gs?\[:/ \\\\]?_?").",v"
 
     elseif g:rvSaveSuffixType == 4
-		"4 = User defined
+        "4 = User defined
         return g:rvSaveSuffix
-	else
+    else
         echo "(rcsvers.vim) Error: unknown suffix type: ".g:rvSaveSuffixType
     endif
 endfunction
@@ -543,6 +572,12 @@ function! s:rcsvers(type)
     let l:suffix = s:CreateSuffix()
 
     let l:SaveDirectoryName = s:GetSaveDirectoryName()
+
+    " Should we only save if RCS exists?
+    if (g:rvSaveIfRCSExists == 1) && (g:rvSaveDirectoryType != 1) &&
+     \ (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
+        return
+    endif
 
     " Create RCS dir if it doesn't exist
     if (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
@@ -872,13 +907,6 @@ endfunction
 
 " Default key mappings to generate a revision log, and diff with adjacent
 " versions.
-" You probably want to map these in your _vimrc to something easier to type, 
-" like a function key.  Do it like this:
-" re-map rcsvers.vim keys
-"map <F8> \rlog
-"map <F5> \older
-"map <F6> \newer
-"
 "------------------------------------------------------------------------------
 nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
 
