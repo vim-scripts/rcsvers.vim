@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/09/15 15:17:05 $
-"      Version: $Revision: 1.15 $
+"  Last Change: $Date: 2003/12/09 14:18:35 $
+"      Version: $Revision: 1.16 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -71,6 +71,9 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.16  Save some settings that "set diff" mangles, and different check for
+"       &cp
 "
 " 1.15  Add functions to go back and forth between versions (mapped to \older
 "       and \newer). It's kind of jerky, but comes in handy sometimes. Also
@@ -177,7 +180,7 @@
 "       in your vimrc file.
 "
 " g:rvSkipVimRcsFileName
-"       This is the name of the file the script will look for, if its found
+"       This is the name of the file the script will look for, if it's found
 "       in the directory the file is being edited the RCS file will not
 "       be written. By default the name is _novimrcs for Dos/win systems
 "       and .novimrcs for all other. To override use:
@@ -251,7 +254,6 @@
 "           " show the log using the local timezone
 "           let g:rvRlogOptions = '-zLT'
 "
-"
 " g:rvDescription
 "       This allows you to set your initial description and version
 "       message. The default value is 'vim'. To override use:
@@ -295,10 +297,13 @@
 
 " Load script once
 "------------------------------------------------------------------------------
-if exists("loaded_rcsvers") || &cp
+if exists("loaded_rcsvers")
     finish
 endif
 let loaded_rcsvers = 1
+
+let s:save_cpo = &cpo
+set cpo&vim
 
 " Set additional RCS options
 "------------------------------------------------------------------------------
@@ -430,8 +435,34 @@ function! s:bufunload()
     if exists("s:child_bufnr") && s:child_bufnr ==  expand("<abuf>")
         sil! exec bufwinnr(s:parent_bufnr) . " wincmd w"
         set nodiff
-        set foldcolumn=0
+
+        if s:save_scrollbind == 0
+            silent exec ":set noscrollbind"
+        else
+            silent exec ":set scrollbind" 
+        endif
+        silent exec ":set scrollopt=" . s:save_scrollopt
+        if s:save_wrap == 0
+            silent exec ":set nowrap"
+        else
+            silent exec ":set wrap"
+        endif
+        silent exec ":set foldmethod=" . s:save_foldmethod
+        silent exec ":set foldcolumn=" . s:save_foldcolumn
         unlet! s:child_bufnr s:parent_bufnr s:revision
+    endif
+endfunction
+
+" Function: save settings that get mangled {{{1
+"------------------------------------------------------------------------------
+function! s:RcsVersSaveSettings()
+    if (!exists("s:child_bufnr"))
+        "save some options that "set diff" mucks with
+        let s:save_scrollbind=&scrollbind
+        let s:save_scrollopt=&scrollopt
+        let s:save_wrap=&wrap
+        let s:save_foldmethod=&foldmethod
+        let s:save_foldcolumn=&foldcolumn
     endif
 endfunction
 
@@ -598,6 +629,7 @@ endfunction
 " Function: Display the revision log {{{1
 "------------------------------------------------------------------------------
 function! s:DisplayLog()
+    call s:RcsVersSaveSettings()
     "if the log or a version diff is already displayed, delete it and quit
     "(so that this function will work as a toggle)
     if (exists("s:child_bufnr"))
@@ -703,6 +735,7 @@ endfunction
 " Function: Compare the current file to the next revision ("older" or "newer") {{{1
 "------------------------------------------------------------------------------
 function! s:NextCompareFiles(direction)
+    call s:RcsVersSaveSettings()
 
     "start off in the parent window
     if (exists("s:parent_bufnr"))
@@ -837,13 +870,21 @@ function! s:CompareFiles(revision)
 endfunction
 "}}}
 
-" Default key mappings to generate revision log.
-" You probably want to map these to something easier to type, like a function
-" key
+" Default key mappings to generate a revision log, and diff with adjacent
+" versions.
+" You probably want to map these in your _vimrc to something easier to type, 
+" like a function key.  Do it like this:
+" re-map rcsvers.vim keys
+"map <F8> \rlog
+"map <F5> \older
+"map <F6> \newer
+"
 "------------------------------------------------------------------------------
 nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
 
 nnoremap <Leader>older :call <SID>NextCompareFiles("older")<cr>
 nnoremap <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
+let &cpo = s:save_cpo
 " vim600:tw=78:set fdm=marker:
+
