@@ -1,9 +1,9 @@
 " rcsvers.vim
 " Maintainer: Roger Pilkey (rpilkey at magma.ca)
-" $Author: rpilkey $
-" $Date: 2003/02/19 14:50:43 $
-" $Revision: 1.3 $
-" $Id: rcsvers.vim,v 1.3 2003/02/19 14:50:43 rpilkey Exp $
+" $Author: bert $
+" $Date: 2003/02/20 09:29:29 $
+" $Revision: 1.11 $
+" $Id: rcsvers.vim,_home_bert_.vim_plugin 1.11 2003/02/20 09:29:29 bert Exp bert $
 "
 "
 " Vim plugin for automatically saving backup versions in rcs
@@ -43,23 +43,27 @@ function! s:rcsvers_post()
 	if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
 		let l:sep = "\\"
 	else
+		" BUG: attention macos has ":"
 		let l:sep = "\/"
 	endif
 
-	" Path where all RCS files will be saved to
-	" use this to have one directory for all rcs files
-	" (duplicate filenames may cause a problem, use the unique suffix below)
+	" Path where RCS files will be saved to:
+
+	" a. Use this to have one directory for all rcs files
+	"    (duplicate filenames may cause a problem, use the unique suffix below)
+	" BUG: maybe add the files path, when editing a file not in current directory.
 	let l:rcsdir = $VIM . l:sep . "RCSFiles"
 	
-	" or use the RCS directory under the current directory
-	"let l:rcsdir = "RCS"
-	
-	" Create a suffix to make unique rcs files when files that are
-	" in different directories have the same name
+	" b. Use the RCS directory in the files directory
+	" let l:rcsdir = expand("%:h") . l:sep . "RCS"
+
+	" RCS file suffix	
+	" a. Create a suffix to make unique rcs files when files that are
+	"    in different directories have the same name
 	let l:suffix = "," . expand("%:p:h:gs?\[:/ \\\\]?_?")
-	
-	" or use the regular suffix
-	"let l:suffix = ",v"
+
+	" b. use the regular suffix
+	" let l:suffix = ",v"
 
 	" Create RCS dir if it doesn't exist
 	if ! isdirectory(l:rcsdir)
@@ -71,7 +75,7 @@ function! s:rcsvers_post()
 	endif
 	
 	" Generate name of RCS file
-	let l:rcsfile = l:rcsdir . l:sep . bufname("%") . l:suffix
+	let l:rcsfile = l:rcsdir . l:sep . expand("%:t") . l:suffix
 
 	" ci options are as follows:
 	" -i        Initial check in
