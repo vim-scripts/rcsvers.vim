@@ -5,10 +5,10 @@
 "               whenever a file is saved.
 "
 "       Author: Roger Pilkey (rpilkey at magma.ca)
-"   Maintainer: Juan Frias (frias.juan at comcast.net)
+"   Maintainer: Juan Frias (earthdust at comcast.net)
 "
-"  Last Change: $Date: 2005/03/04 06:11:57 $
-"      Version: $Revision: 1.22 $
+"  Last Change: $Date: 2005/03/31 09:33:11 $
+"      Version: $Revision: 1.23 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -87,6 +87,10 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.23  Added an option to fix the path on Cygwin systems.  
+"       See g:rvUseCygPathFiltering  
+"       Thanks to Simon Johann-Günter 
+"
 " 1.22  some re-factoring, and add the option to leave RCS files unlocked when
 "       saving, which is handy for multiple users of the same RCS file.  
 "       See g:rvLeaveRcsUnlocked. (from Roger Pilkey)
@@ -384,6 +388,13 @@
 "       expression is present, see g:rvExcludeExpression for a sample
 "       expression.
 "
+" g:rvUseCygPathFiltering
+"       This switch is used to convert the command to use a cygwin rcs
+"       implementation.
+"           0 = Call rcs with native vim filename (default)
+"           1 = Filter filename through cygpath in order to be able to call
+"               cygwin installation of rcs.
+"
 
 " Global variables: {{{1
 "------------------------------------------------------------------------------
@@ -538,6 +549,12 @@ if !exists('g:rvIncludeExpression')
     let g:rvIncludeExpression = ""
 endif
 
+" Set the default for cygpath filtering
+"------------------------------------------------------------------------------
+if !exists('g:rvUseCygPathFiltering')
+    let g:rvUseCygPathFiltering = 0
+endif
+
 " Hook the RCS function to the Save events {{{1
 "------------------------------------------------------------------------------
 augroup rcsvers
@@ -630,10 +647,10 @@ function! s:GetSaveDirectoryName()
             let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
         endif
     else
-        return g:rvSaveDirectoryName
+        let l:SaveDirectoryName = g:rvSaveDirectoryName
     endif
 
-    return l:SaveDirectoryName
+    return expand(l:SaveDirectoryName)
 endfunction
 
 " Function: Generate suffix {{{1
@@ -766,10 +783,19 @@ function! s:rcsvers(type)
         let l:cmdopts = " -x".l:suffix
     endif
 
-    let l:cmdopts = l:cmdopts." ".g:rvFileQuote.bufname("%").g:rvFileQuote
+    let l:editedfilename = bufname("%")
+    if (g:rvUseCygPathFiltering != 0)
+        let l:editedfilename = substitute(system("cygpath \"".l:editedfilename."\""),"\\n","","g")
+    endif
+    let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:editedfilename.g:rvFileQuote
 
     if (g:rvSaveSuffixType != 0)
-        let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+        if (g:rvUseCygPathFiltering != 0)
+            let l:cygpathrcsfile = substitute(system("cygpath \"".substitute(l:rcsfile,"\\\\","\\\\\\\\","g")."\""),"\\n","","g")
+        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
+		else
+        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+        endif
     endif
 
     if (getfsize(l:rcsfile) == -1)
@@ -1086,10 +1112,18 @@ function! s:GetCommonCmdOpts()
         let l:cmdopts = " -x".l:suffix
     endif
 
-    let l:cmdopts = l:cmdopts." ".g:rvFileQuote.bufname("%").g:rvFileQuote
+	"some rcs implementations accept two filenames on co (editedfilename +
+	"rcsfilename), some (cygwin) don't.  So only use the rcsfilename.  
+	"however, you do need it above for the rcs and ci commands
 
+	"RCS filename
     if (g:rvSaveSuffixType != 0)
-        let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+        if (g:rvUseCygPathFiltering != 0)
+            let l:cygpathrcsfile = substitute(system("cygpath \"".substitute(l:rcsfile,"\\\\","\\\\\\\\","g")."\""),"\\n","","g")
+        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
+		else
+        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+        endif
     endif
 
     " -q   Keep quiet ( no messages )
