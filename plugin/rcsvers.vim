@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2004/01/27 11:17:15 $
-"      Version: $Revision: 1.17 $
+"  Last Change: $Date: 2004/02/17 10:28:03 $
+"      Version: $Revision: 1.18 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -46,15 +46,18 @@
 "
 " You probably want to map these in your vimrc file to something easier to type,
 " like a function key.  Do it like this:
-""re-map rcsvers.vim keys
-"map <F8> \rlog
-"map <F5> \older
-"map <F6> \newer
+"
+"   "re-map rcsvers.vim keys
+"   map <F8> \rlog
+"   map <F5> \older
+"   map <F6> \newer
 "
 " You may need to set the following shell or environment variables:
-" user name:
+"
+" User name:
 "        LOGNAME=myusername
-" timezone:  (example is for EST)
+"
+" Time zone:  (example is for EST)
 "        TZ=GMT+5
 "
 "------------------------------------------------------------------------------
@@ -79,6 +82,10 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.18  Added the option to save an RCS version only if the RCS file already
+"       exists (No new RCS files will be created). (from Marc Schoechlin)
+"       See rvSaveIfPreviousRCSFileExists option.
 "
 " 1.17  Added the option to save an RCS version only when there is an RCS
 "       directory in the files directory. See rvSaveIfRCSExists option.
@@ -212,6 +219,13 @@
 "       Note: If using g:rvSaveDirectoryType = 2 make sure you use
 "             a suffix (see g:rvSaveSuffixType) or the script might overwrite
 "             your file.
+
+" g:rvSaveIfPreviousRCSFileExists
+"       This specifies that RCS files will only be saved if the a previous
+"       RCS file is present for the file being edited. If the RCS file
+"       doesn't exist then the 'backup' will not be created.
+"           0 = Create new RCS file when needed
+"           1 = Only save RCS files if the RCS file already exists.
 "
 " g:rvSaveIfRCSExists
 "       This specifies that RCS files will only be saved if the RCS directory
@@ -407,6 +421,12 @@ if !exists('g:rvSaveDirectoryType')
     let g:rvSaveDirectoryType = 0
 endif
 
+" Only save if RCS file already exists
+" -----------------------------------------------------------------------------
+if !exists('g:rvSaveIfPreviousRCSFileExists')
+    let g:rvSaveIfPreviousRCSFileExists = 0
+endif
+
 " Only save if RCS already exists
 " -----------------------------------------------------------------------------
 if !exists('g:rvSaveIfRCSExists')
@@ -478,6 +498,7 @@ function! s:bufunload()
         endif
         silent exec ":set foldmethod=" . s:save_foldmethod
         silent exec ":set foldcolumn=" . s:save_foldcolumn
+        let @"=s:save_unnamed_reg
         unlet! s:child_bufnr s:parent_bufnr s:revision
     endif
 endfunction
@@ -492,6 +513,9 @@ function! s:RcsVersSaveSettings()
         let s:save_wrap=&wrap
         let s:save_foldmethod=&foldmethod
         let s:save_foldcolumn=&foldcolumn
+
+        "save unnamed register from getting clobbered
+        let s:save_unnamed_reg=@"
     endif
 endfunction
 
@@ -573,7 +597,7 @@ function! s:rcsvers(type)
 
     let l:SaveDirectoryName = s:GetSaveDirectoryName()
 
-    " Should we only save if RCS exists?
+    " Should we only save if RCS directory exists?
     if (g:rvSaveIfRCSExists == 1) && (g:rvSaveDirectoryType != 1) &&
      \ (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
         return
@@ -592,6 +616,11 @@ function! s:rcsvers(type)
 
     " Generate name of RCS file
     let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+
+    " Should we only save if RCS file exists?
+    if (g:rvSaveIfPreviousRCSFileExists == 1) && (getfsize(l:rcsfile) == -1)
+        return
+    endif
 
     " ci options are as follows:
     " -i        Initial check in
