@@ -1,14 +1,23 @@
-" rcsvers.vim
-" Original Author: Roger Pilkey (rpilkey at magma.ca)
-" Maintainer: Juan Frias (frias.junk at earthlink.net)
-" $Author: juanf $
-" $Date: 2003/02/24 19:13:56 $
-" $Revision: 1.7 $
-" $Id: rcsvers.vim,D__Vim_vimfiles_plugin 1.7 2003/02/24 19:13:56 juanf Exp juanf $
+"    Copyright: Permission is hereby granted to use and distribute this code,
+"               with or without modifications, provided that this copyright
+"               notice is copied with it. Like anything else that's free,
+"               this script is provided *as is* and comes with no
+"               warranty of any kind, either expressed or implied. In no
+"               event will the author(s) be liable for any damamges
+"               resulting from the use of this script.
+"
+" Name Of File: rcsvers.vim
+"  Description: Vim plugin to automatically save backup versions in RCS
+"       Author: Roger Pilkey (rpilkey at magma.ca)
+"   Maintainer: Juan Frias (frias.junk at earthlink.net)
+"  Last Change: $Date: 2003/02/27 17:55:29 $
+"      Version: $Revision: 1.7 $
+"
+"        Usage: Normally, this file should reside in the plugins directory.
 "
 "--------------------------------------------------------------------------
 "
-" Please send me any bug so I can keep the script up to date.
+" Please send me any bugs so I can keep the script up to date.
 "
 "--------------------------------------------------------------------------
 "
@@ -18,7 +27,7 @@
 " What's RCS? See http://www.gnu.org/software/rcs/rcs.html
 "
 " Be careful if you really use RCS as your production file control, it
-" will add versions like crazy.
+" will add versions like crazy. See options bellow for work arounds.
 "
 " If you're using Microsoft Windows, then the rcs programs are available by
 " installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
@@ -26,14 +35,22 @@
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
 "
+" 1.7   Will not alter the $xx$ tags when automaticaly checking in files.
+"       (Thanks to Engelbert Gruber). Added option to save under the current
+"       directory with no RCS sub directory. Also added the option to choose
+"       your own suffixes.
+"
 " 1.6   Complete script re-write. added ability to set user options by vimrc
 "       and will now allow you to compare to older revision if you have grep
 "       and sed installed.
+"
 " 1.5   add l:skipfilename to allow exclusion of directories from versioning.
 "       and FIX for editing in current directory with local RCS directory.
+"
 " 1.4   FIX editing files not in current directory.
-" 1.3 	option to select the rcs directory,
-" 		and better comments thanks to Juan Frias
+"
+" 1.3   option to select the rcs directory,
+"       and better comments thanks to Juan Frias
 "
 "--------------------------------------------------------------------------
 "
@@ -82,11 +99,16 @@
 "
 " g:rvSaveDirectoryType
 "       This specifies how the script will save the RCS files. by default
-"       they will be saved under the current directory. To overwrite use:
+"       they will be saved under the current directory (under RCS). To
+"       overwrite use:
 "           let g:rvSaveDirectoryType = 1
 "       in your vimrc file, options are as follows:
-"           0 = Save in current directory
+"           0 = Save in current directory (under RCS)
 "           1 = Single directory for all files
+"           2 = Save in current direcotry (same as the orignal file)
+"
+"       NoTE: If using g:rvSaveDirectoryType = 2 make sure you use
+"             suffix or the script might overwrite your file.
 "
 " g:rvSaveDirectoryName
 "       This specifies the name of the directory where the RCS files will
@@ -97,6 +119,24 @@
 "       the default name use:
 "           let g:rvSaveDirectoryName = <my directory name>
 "       in your vimrc file.
+"
+" g:rvSaveSuffixType
+"       This specifies what the script uses as a suffix, when saving the
+"       RCS files. The default is ',v' suffix when using rvSaveDirectoryType
+"       number 0 (current directory under RCS), and unique suffix when using
+"       rvSaveDirectoryType number 1. (single directory for all files). To
+"       overwrite the defaults use:
+"           let g:rvSaveSuffixType = x
+"       where 'x' is one of the following
+"           0 = No suffix.
+"           1 = Use the ',v" suffix
+"           2 = Use a unique suffix (take the full path and changes the
+"               directory separators to underscores)
+"           3 = use a unique suffix with a 'v' Appended to the end.
+"           4 = User defined suffix.
+"       If you select type number 3 the default is ',v' to overwrite Use:
+"           let g:rvSaveSuffix = 'xxx'
+"       where 'xxx' is your user defined suffix.
 "
 "--------------------------------------------------------------------------
 
@@ -119,7 +159,6 @@ map <Leader>rlog :call <SID>DisplayLog()<cr>
 if !exists('g:rvCompareProgram')
     let g:rvCompareProgram = "diff"
 endif
-
 
 " Set the directory separator
 "--------------------------------------------------------------------------
@@ -170,11 +209,31 @@ endif
 if !exists('g:rvSaveDirectoryName')
     if g:rvSaveDirectoryType == 0
         let g:rvSaveDirectoryName = "RCS"
-    else
+
+    elseif g:rvSaveDirectoryType == 1
         let g:rvSaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles"
+
+    else " Type 2
+        let g:rvSaveDirectoryName = "."
+
     endif
 endif
 
+" Set the suffix type
+"--------------------------------------------------------------------------
+if !exists('g:rvSaveSuffixType')
+    if g:rvSaveDirectoryType == 0
+        let g:rvSaveSuffixType = 1
+    else
+        let g:rvSaveSuffixType = 2
+    endif
+endif
+
+" Set default user defined suffix
+"--------------------------------------------------------------------------
+if (g:rvSaveSuffixType == 4) && (!exists('g:rvSaveSuffix'))
+    let g:rvSaveSuffix = ",v"
+endif
 
 " Hook Save RCS function to events
 "--------------------------------------------------------------------------
@@ -188,10 +247,21 @@ augroup END
 " Generate suffix
 "--------------------------------------------------------------------------
 function! s:CreateSuffix()
-    if g:rvSaveDirectoryType == 0
+    if g:rvSaveSuffixType == 0
+        return ""
+
+    elseif g:rvSaveSuffixType == 1
         return ",v"
-    else
+
+    elseif g:rvSaveSuffixType == 2
         return "," . expand("%:p:h:gs?\[:/ \\\\]?_?")
+
+    elseif g:rvSaveSuffixType == 3
+        return "," . expand("%:p:h:gs?\[:/ \\\\]?_?") . ",v"
+
+    else " type 4 User defined
+        return g:rvSaveSuffix
+
     endif
 endfunction
 
@@ -208,11 +278,12 @@ function! s:rcsvers_post()
     let l:suffix = s:CreateSuffix()
 
     " Create RCS dir if it doesn't exist
-    if !isdirectory(g:rvSaveDirectoryName)
+    if (g:rvSaveDirectoryType != 2) && (!isdirectory(g:rvSaveDirectoryName))
         let l:returnval = system("mkdir " . g:rvSaveDirectoryName)
         if ( l:returnval != "" )
-            let l:err = "Could not create rcs directory: " . g:rvSaveDirectoryName . "\nThe error was: " . l:returnval
-            confirm(l:err, "&Okay")
+            let l:err = "Could not create rcs directory: " . g:rvSaveDirectoryName
+            let l:err = l:err . "\nThe error was: " . l:returnval
+            echo l:err
             return
         endif
     endif
@@ -226,17 +297,27 @@ function! s:rcsvers_post()
     " -t-       File description at initial check in.
     " -x        Suffix to use for rcs files.
     " -m        Log message
+    " -ko       Used for RCS to not modify $xx$ tags
 
     if (getfsize(l:rcsfile) == -1)
-        " Initial check-in note: -i -t-
-        let l:cmd = "ci -i -l -t- -x" . l:suffix
-    else
-        " Subsequent check-ins note: -m
-        let l:cmd = "ci -l -mvim_rcsvers -x" . l:suffix
+        " Initial check-in, create an empty RCS file
+        let l:cmd = "rcs -i -ko -t-vim " .l:rcsfile
+        let l:xx = system(l:cmd)
+    endif
+
+    let l:cmd = "ci -l -mvim -t-vim"
+
+    if (g:rvSaveSuffixType != 0)
+        let l:cmd = l:cmd . " -x" . l:suffix
     endif
 
     " Build command string <command> <filename> <rcs file>
-    let l:cmd = l:cmd . " " . bufname("%") . " " . l:rcsfile
+    let l:cmd = l:cmd . " " . bufname("%")
+
+    if (g:rvSaveSuffixType != 0)
+        let l:cmd = l:cmd . " " . l:rcsfile
+    endif
+
     return system(l:cmd)
 
 endfunction
