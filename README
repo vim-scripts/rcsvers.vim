@@ -1,0 +1,43 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=563
+
+A Vim plugin for automatically saving backup versions in RCS whenever a file is saved.  You can compare to any revision as well.
+keywords: VCS, version control system, incremental saving, automatic versioning, automatic journalling or journaling, or autosave backups with versions.
+
+The maintainer is Juan Frias (juandfrias at gmail.com)
+
+What's RCS? It's the Revision Control System, a set of programs used for keeping many versions of a file. See http://www.gnu.org/software/rcs/rcs.html
+
+The RCS programs are freely available at http://www.cs.purdue.edu/homes/trinkle/RCS/
+
+Be careful if you really use RCS as your production file control, it will add versions like crazy.  See the g:rvMode option to have more control over when a save is added to the revision file.
+
+rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
+
+Inspired by savevers.vim by Ed Ralston (vimscript #89).
+
+ Mapped Keys: 
+               <Leader>rlog    To access the saved revisions log.  This works as
+                                      a toggle to quit the revision windows too.
+
+               <enter>         This will compare the current file to the
+                                    revision under the cursor (works only in
+                                    the revision log window)
+
+               <Leader>older   does a diff with the previous version
+
+               <Leader>newer   does a diff with the next version
+
+ You probably want to map these in your _vimrc to something easier to type, 
+ like a function key.  Do it like this:
+"re-map rcsvers.vim keys
+map <F8> \rlog
+map <F5> \older
+map <F6> \newer
+
+ You may need to set the following shell(environment) variables, you'll get a warning if so:
+ user name:
+		LOGNAME=myusername
+ timezone:  
+		TZ=EST5EDT 
+
+Look here if you have problems with Daylight Saving Time (DST) with RCS after 2007 on Microsoft Windows:  http://support.microsoft.com/kb/932590
