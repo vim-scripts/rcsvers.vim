@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/03/17 17:27:36 $
-"      Version: $Revision: 1.12 $
+"  Last Change: $Date: 2003/05/05 13:39:32 $
+"      Version: $Revision: 1.13 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -33,7 +33,8 @@
 "               2. Setup any variables need in your vimrc file
 "               3. Copy 'rcsvers.vim' to your plugin directory.
 "
-"  Mapped Keys: <Leader>rlog    To access saved revisions log.
+"  Mapped Keys: <Leader>rlog    To access saved revisions log.  This works as
+"                               toggle to quit the revision windows too.
 "
 "               <enter>         This will compare the current file to the
 "                               revision under the cursor (works only in
@@ -62,6 +63,11 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.13  A g:rvFileQuote fix, suggested by Wiktor Niesiobedzki.  Add the
+"       ability to use the current instance of vim for the diff, which is now
+"       the default.  Change the name of the diff temp file to include the 
+"       version.  Make \rlog a toggle (on/off)
 "
 " 1.12  Script will not load if the 'cp' flag is set. Added the option to
 "       use an exclude expression, and include expression. Fixed yet more bugs
@@ -111,11 +117,16 @@
 " g:rvCompareProgram
 "       This is the program that will be called to compare two files,
 "       the temporary file created by the revision log and the current
-"       file. The default program is diff. To overwrite use:
+"       file. The default program is vimdiff in the current instance of vim.
+"       To overwrite use:
 "           let g:rvCompareProgram = <your compare program>
 "       in your vimrc file. Win32 users you may want to use:
 "           let g:rvCompareProgram = start <your program>
 "       for an asynchronous run, type :help :!start for details.
+"       example:
+"           let g:rvCompareProgram = "start\ C:\\Vim\\vim61\\gvim.exe\ -d\ -R\ --noplugin\ "
+"
+"       To open the diff within the current instance of vim, use "This"
 "
 " g:rvFileQuote
 "       This is the character used to enclose filenames when calling the
@@ -273,7 +284,7 @@ endif
 " Set the compare program
 "------------------------------------------------------------------------------
 if !exists('g:rvCompareProgram')
-    let g:rvCompareProgram = "diff"
+    let g:rvCompareProgram = "This"
 endif
 
 " Set the directory separator
@@ -294,13 +305,7 @@ endif
 " Set file name quoting
 "------------------------------------------------------------------------------
 if !exists('g:rvFileQuote')
-    if has("win32") || has("win16") || has("dos32")
-                \ || has("dos16") || has("os2")
-        let g:rvFileQuote = '"'
-
-    else " *nix systems
-        let g:rvFileQuote = ""
-    endif
+    let g:rvFileQuote = '"'
 endif
 
 " Set the temp directory
@@ -339,21 +344,21 @@ endif
 "
 function! s:GetSaveDirectoryName()
 
-	if !exists('g:rvSaveDirectoryName')
-    	if g:rvSaveDirectoryType == 0
-        	let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
-	
-    	elseif g:rvSaveDirectoryType == 1
-        	let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
-	
-    	else " Type 2
-        	let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
-    	endif
-	else
-		return g:rvSaveDirectoryName
-	endif
+    if !exists('g:rvSaveDirectoryName')
+        if g:rvSaveDirectoryType == 0
+            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
 
-	return l:SaveDirectoryName
+        elseif g:rvSaveDirectoryType == 1
+            let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
+
+        else " Type 2
+            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
+        endif
+    else
+        return g:rvSaveDirectoryName
+    endif
+
+    return l:SaveDirectoryName
 endfunction
 
 " Set the suffix type
@@ -393,6 +398,20 @@ augroup rcsvers
                \ s:types." call s:rcsvers_post()"
 augroup END
 
+augroup rcsvers
+   au BufUnload * call s:bufunload()
+augroup END
+
+function! s:bufunload()
+    "turn off the diff settings in the original file when you kill the child
+    "buffer
+    if exists("s:child_bufnr") && s:child_bufnr ==  expand("<abuf>")
+        sil! exec bufwinnr(s:parent_bufnr) . " wincmd w"
+        set nodiff
+        set foldcolumn=0
+        unlet! s:child_bufnr s:parent_bufnr
+    endif
+endfunction
 
 " Generate suffix
 "------------------------------------------------------------------------------
@@ -438,11 +457,11 @@ function! s:rcsvers_post()
 
     let l:suffix = s:CreateSuffix()
 
-	let l:SaveDirectoryName = s:GetSaveDirectoryName()
+    let l:SaveDirectoryName = s:GetSaveDirectoryName()
 
     " Create RCS dir if it doesn't exist
     if (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
-        let l:returnval = system("mkdir ".l:SaveDirectoryName)
+        let l:returnval = system("mkdir ".g:rvFileQuote.l:SaveDirectoryName.g:rvFileQuote)
         if ( l:returnval != "" )
             let l:err = "Error creating rcs directory: ".l:SaveDirectoryName
             let l:err = l:err."\nThe error was: ".l:returnval
@@ -520,10 +539,16 @@ endfunction
 " Function: Display the revision log {{{1
 "------------------------------------------------------------------------------
 function! s:DisplayLog()
+    "if the log or a version diff is already displayed, delete it and quit
+    "(so that this function will work as a toggle)
+    if (exists("s:child_bufnr"))
+         silent exec "bd! " . s:child_bufnr
+         return
+    endif
     let l:suffix = s:CreateSuffix()
-	
-	"save the current directory, in case they automatically change dir when opening files
-	let l:savedir = expand("%:p:h") 
+
+    "save the current directory, in case they automatically change dir when opening files
+    let l:savedir = expand("%:p:h")
 
     let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
@@ -546,23 +571,24 @@ function! s:DisplayLog()
     let l:bufferName = g:rvTempDir.g:rvDirSeparator."RevisionLog"
 
     " If a buffer with the name RevisionLog exists, delete it.
-    if bufexists(l:bufferName)
-    sil! exe 'bd! ' l:bufferName
+    if bufexists("l:bufferName")
+    silent exe 'bd! "'.l:bufferName.'"'
     endif
 
     " Create a new buffer (vertical split).
-    sil! exe 'vnew ' l:bufferName
-    sil! exe 'vertical resize 35'
+    sil exe 'vnew ' l:bufferName
+    sil exe 'vertical resize 35'
+    let s:child_bufnr =  bufnr("%")
 
     " Map <enter> to compare current file to that version
     nnoremap <buffer> <CR> :call <SID>CompareFiles()<CR>
 
-	"change dir to the original file dir, in case they auto change dir
-	"when opening files
-	exec "cd " . l:savedir 
+    "change dir to the original file dir, in case they auto change dir
+    "when opening files
+    sil exec "cd " . l:savedir
 
     " Execute the command.
-    sil! exe 'r!' l:cmd
+    sil exe 'r!' l:cmd
 
     let l:lines = line("$")
 
@@ -593,12 +619,13 @@ function! s:DisplayLog()
                     \"date\\(:[^;]\\+\\).\\+/\\1\\2/g"
 
         " Go to about the beginning of the buffer.
-        sil! exe "normal 2G"
+        sil! exe "normal 1Gj"
 
     endif
 
     " Make it so that the file can't be edited.
     setlocal nomodified
+    setlocal noswapfile
     setlocal nomodifiable
     setlocal readonly
 
@@ -614,12 +641,12 @@ function! s:CompareFiles()
                 \"^\\([.0-9]\\+\\).\\+", "\\1", "g")
 
     " Close the revision log, This will send us back to the original file.
-    sil! exe "bd!"
+    silent exe "bd!"
 
     let l:suffix = s:CreateSuffix()
-	
-	"save the current directory, in case they automatically change dir when opening files
-	let l:savedir = expand("%:p:h") 
+
+    "save the current directory, in case they automatically change dir when opening files
+    let l:savedir = expand("%:p:h")
 
     let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
@@ -642,26 +669,42 @@ function! s:CompareFiles()
                 \g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " Create a new buffer to place the co output
-    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t")
-    sil! exe "new ".l:tmpfile
+    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t").".".l:revision
+    "save the buffer number of the original file
+    let s:parent_bufnr = bufnr("%")
+
+    "create a new buffer
+    sil exe "vnew ".l:tmpfile
+
+    "save the buffer number of the revision file
+    let s:child_bufnr = bufnr("%")
 
     " Delete the contents if it's not empty
-    sil! exe "1,$d"
+    sil exe "1,$d"
 
-	"change dir to the original file dir, in case they auto change dir
-	"when opening files
-	exec "cd " . l:savedir 
+    "change dir to the original file dir, in case they auto change dir
+    "when opening files
+    exec "cd " . l:savedir
 
     " Run the command and capture the output
-    sil! exe "silent r!".l:cmd
+    sil exe "sil! 0r!".l:cmd
+    setlocal noswapfile
+    setlocal nomodified
 
+    " Execute the outside compare program.
+    if (g:rvCompareProgram !=? "This")
     " Write the file and quit it
-    sil! exe "w!"
-    sil! exe "bd!"
+        sil exe "w!"
+        sil exe "bd!"
 
-    " Execute the compare program.
     sil exe "!".g:rvCompareProgram." " g:rvFileQuote.l:tmpfile.
                 \g:rvFileQuote.' '.g:rvFileQuote.bufname("%").g:rvFileQuote
+    else
+    " or do a diff in the current instance of vim
+        diffthis
+        sil exec bufwinnr(s:parent_bufnr) . "wincmd w"
+        diffthis
+    endif
 
 endfunction
 
@@ -672,3 +715,4 @@ endfunction
 nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
 
 " vim600: tw=78 : set foldmethod=marker :
+
