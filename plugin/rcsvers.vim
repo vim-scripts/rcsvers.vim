@@ -1,9 +1,9 @@
 " rcsvers.vim
 " Maintainer: Roger Pilkey (rpilkey at magma.ca)
 " $Author: bert $
-" $Date: 2003/02/20 09:29:29 $
-" $Revision: 1.11 $
-" $Id: rcsvers.vim,_home_bert_.vim_plugin 1.11 2003/02/20 09:29:29 bert Exp bert $
+" $Date: 2003/02/20 10:04:15 $
+" $Revision: 1.4 $
+" $Id: rcsvers.vim,v 1.4 2003/02/20 10:04:15 bert Exp bert $
 "
 "
 " Vim plugin for automatically saving backup versions in rcs
@@ -23,6 +23,9 @@
 " To Do: add version/diff viewing tools like savevers.vim
 "
 " Changes:
+" 1.5   add l:skipfilename to allow exclusion of directories from versioning.
+"       and FIX for editing in current directory with local RCS directory.
+" 1.4   FIX editing files not in current directory.
 " 1.3 	option to select the rcs directory,
 " 		and better comments thanks to Juan Frias
 " 
@@ -42,9 +45,16 @@ function! s:rcsvers_post()
 	"set the directory separator
 	if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
 		let l:sep = "\\"
+		let l:skipfilename = "_novimrcs"
 	else
 		" BUG: attention macos has ":"
 		let l:sep = "\/"
+		let l:skipfilename = ".novimrcs"
+	endif
+
+	" Exclude directories from versioning, by putting skipfile there.
+	if filereadable( expand("%:p:h") . l:sep . l:skipfilename )
+		return
 	endif
 
 	" Path where RCS files will be saved to:
@@ -55,7 +65,7 @@ function! s:rcsvers_post()
 	let l:rcsdir = $VIM . l:sep . "RCSFiles"
 	
 	" b. Use the RCS directory in the files directory
-	" let l:rcsdir = expand("%:h") . l:sep . "RCS"
+	" let l:rcsdir = expand("%:p:h") . l:sep . "RCS"
 
 	" RCS file suffix	
 	" a. Create a suffix to make unique rcs files when files that are
