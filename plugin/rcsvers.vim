@@ -10,8 +10,8 @@
 "  Description: Vim plugin to automatically save backup versions in RCS
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
-"  Last Change: $Date: 2003/02/27 17:55:29 $
-"      Version: $Revision: 1.7 $
+"  Last Change: $Date: 2003/02/28 18:25:12 $
+"      Version: $Revision: 1.11 $
 "
 "        Usage: Normally, this file should reside in the plugins directory.
 "
@@ -34,6 +34,8 @@
 " in your path.
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
+"
+" 1.8   Fixed minor Prefix bug,
 "
 " 1.7   Will not alter the $xx$ tags when automaticaly checking in files.
 "       (Thanks to Engelbert Gruber). Added option to save under the current
@@ -301,8 +303,15 @@ function! s:rcsvers_post()
 
     if (getfsize(l:rcsfile) == -1)
         " Initial check-in, create an empty RCS file
-        let l:cmd = "rcs -i -ko -t-vim " .l:rcsfile
+        let l:cmd = "rcs -i -ko -t-vim "
+
+        if (g:rvSaveSuffixType != 0)
+            let l:cmd = l:cmd . " -x" . l:suffix
+        endif
+
+        let l:cmd = l:cmd. " " .l:rcsfile
         let l:xx = system(l:cmd)
+        let l:xx = confirm(l:cmd)
     endif
 
     let l:cmd = "ci -l -mvim -t-vim"
@@ -404,6 +413,6 @@ function! s:CompareFiles()
     execute "wq"
 
     " Execute the compare program.
-    execute "!" . g:rvCompareProgram. " " g:rvTempDir. g:rvDirSeparator. bufname("%") . " " . bufname("%")
+    sil execute "!" . g:rvCompareProgram. " " g:rvTempDir. g:rvDirSeparator. bufname("%") . " " . bufname("%")
 
 endfunction
