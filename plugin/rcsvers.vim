@@ -3,17 +3,21 @@
 "               notice is copied with it. Like anything else that's free,
 "               this script is provided *as is* and comes with no
 "               warranty of any kind, either expressed or implied. In no
-"               event will the author(s) be liable for any damamges
+"               event will the author(s) be liable for any damages
 "               resulting from the use of this script.
 "
 " Name Of File: rcsvers.vim
 "  Description: Vim plugin to automatically save backup versions in RCS
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
-"  Last Change: $Date: 2003/02/28 18:25:12 $
-"      Version: $Revision: 1.11 $
+"  Last Change: $Date: 2003/02/28 22:45:07 $
+"      Version: $Revision: 1.9 $
 "
 "        Usage: Normally, this file should reside in the plugins directory.
+"
+"  Mapped Keys: <Leader>rlog To access saved revisions. Note sed and grep
+"               are needed for this operation se bellow for a website if
+"               you are using Dos/win.
 "
 "--------------------------------------------------------------------------
 "
@@ -27,17 +31,26 @@
 " What's RCS? See http://www.gnu.org/software/rcs/rcs.html
 "
 " Be careful if you really use RCS as your production file control, it
-" will add versions like crazy. See options bellow for work arounds.
+" will add versions like crazy. See options bellow for work around.
 "
 " If you're using Microsoft Windows, then the rcs programs are available by
 " installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
 " in your path.
 "
+" The sed and grep programs for Windows are available for free here:
+" http://unxutils.sourceforge.net/
+"
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
+"
+" 1.9   Added even more options, the ability to set your own description and
+"       pass additional options to CI command. Dos/Win Temp directory is taken
+"       from the $TEMP environment variable, and quote filenames when using
+"       diff program to prevent errors with long filenames with spaces. Also
+"       removed confirm box from script.
 "
 " 1.8   Fixed minor Prefix bug,
 "
-" 1.7   Will not alter the $xx$ tags when automaticaly checking in files.
+" 1.7   Will not alter the $xx$ tags when automatically checking in files.
 "       (Thanks to Engelbert Gruber). Added option to save under the current
 "       directory with no RCS sub directory. Also added the option to choose
 "       your own suffixes.
@@ -76,6 +89,13 @@
 "           let g:rvCompareProgram = start <your program>
 "       for an asynchronous run type :help :!start for details.
 "
+" g:rvFileQuote
+"       This is the character used to enclose filenames when calling the
+"       compare program. By default in DOS/Win Systems is '"' (quote) in
+"       all other system it's blank. To overwrite this use:
+"           let g:rvFileQuote = <quote char>
+"       in your vimrc file.
+"
 " g:rvDirSeparator
 "       Separator to use between paths script will try to auto detect
 "       but to overwrite use:
@@ -107,7 +127,7 @@
 "       in your vimrc file, options are as follows:
 "           0 = Save in current directory (under RCS)
 "           1 = Single directory for all files
-"           2 = Save in current direcotry (same as the orignal file)
+"           2 = Save in current directory (same as the original file)
 "
 "       NoTE: If using g:rvSaveDirectoryType = 2 make sure you use
 "             suffix or the script might overwrite your file.
@@ -140,6 +160,19 @@
 "           let g:rvSaveSuffix = 'xxx'
 "       where 'xxx' is your user defined suffix.
 "
+" g:rvCiOptions
+"       This specifies additional options to send to CI (check in program)
+"       by default this is blank. Refer to RCS documentation for aditional
+"       options to pass. To overwrite use:
+"           let g:rvCiOptions = <options>
+"       in your vimrc file.
+"
+" g:rvDescription
+"       This allows you to set your initial description and version
+"       message. The default value is 'vim'. To overwrite use:
+"           let g:rvDescription = <description>
+"       in your vimrc file.
+
 "--------------------------------------------------------------------------
 
 
@@ -155,6 +188,18 @@ let loaded_rcsvers = 1
 "--------------------------------------------------------------------------
 map <Leader>rlog :call <SID>DisplayLog()<cr>
 
+
+" Set additional ci options
+"--------------------------------------------------------------------------
+if !exists('g:rvCiOptions')
+    let g:rvCiOptions = ""
+endif
+
+" Set initial description and version message.
+"--------------------------------------------------------------------------
+if !exists('g:rvDescription')
+    let g:rvDescription = "vim"
+endif
 
 " Set the compare program
 "--------------------------------------------------------------------------
@@ -176,12 +221,22 @@ if !exists('g:rvDirSeparator')
     endif
 endif
 
+" Set file name quoting
+"--------------------------------------------------------------------------
+if !exists('g:rvFileQuote')
+    if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+        let g:rvFileQuote = '"'
+
+    else " *nix systems
+        let g:rvFileQuote = ""
+    endif
+endif
 
 " Set the temp directory
 "--------------------------------------------------------------------------
 if !exists('g:rvTempDir')
     if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
-        let g:rvTempDir = "C:\\Temp"
+        let g:rvTempDir = expand("$temp")
     else
         let g:rvTempDir = g:rvDirSeparator."tmp"
     endif
@@ -272,7 +327,7 @@ endfunction
 "--------------------------------------------------------------------------
 function! s:rcsvers_post()
 
-    " Exclude directories from versioning, by putting skipfile there.
+    " Exclude directories from versioning, by putting skip file there.
     if filereadable( expand("%:p:h") . g:rvDirSeparator . g:rvSkipVimRcsFileName )
         return
     endif
@@ -303,7 +358,7 @@ function! s:rcsvers_post()
 
     if (getfsize(l:rcsfile) == -1)
         " Initial check-in, create an empty RCS file
-        let l:cmd = "rcs -i -ko -t-vim "
+        let l:cmd = "rcs -i -ko -t-".g:rvDescription." "
 
         if (g:rvSaveSuffixType != 0)
             let l:cmd = l:cmd . " -x" . l:suffix
@@ -311,10 +366,9 @@ function! s:rcsvers_post()
 
         let l:cmd = l:cmd. " " .l:rcsfile
         let l:xx = system(l:cmd)
-        let l:xx = confirm(l:cmd)
     endif
 
-    let l:cmd = "ci -l -mvim -t-vim"
+    let l:cmd = "ci -l -m".g:rvDescription." -t-".g:rvDescription." " . g:rvCiOptions
 
     if (g:rvSaveSuffixType != 0)
         let l:cmd = l:cmd . " -x" . l:suffix
@@ -353,7 +407,7 @@ function! s:DisplayLog()
 
     " If a buffer with the name rlog exists, delete it.
     if bufexists(l:bufferName)
-    execute 'bd! ' l:bufferName
+    sil! execute 'bd! ' l:bufferName
     endif
 
     " Create a new buffer (vertical split).
@@ -400,7 +454,8 @@ function! s:CompareFiles()
     let l:cmd = "co -q -p -r" . l:revision . " -x" . l:suffix . " " . bufname("%") . " " . l:rcsfile
 
     " Create a new buffer to place the co output
-    execute "new ". g:rvTempDir .g:rvDirSeparator. bufname("%")
+    let l:tmpfile = g:rvTempDir .g:rvDirSeparator."_".bufname("%")
+    execute "new ".l:tmpfile
 
     " Delete the contents if it's not empty
     execute "normal 1G"
@@ -413,6 +468,6 @@ function! s:CompareFiles()
     execute "wq"
 
     " Execute the compare program.
-    sil execute "!" . g:rvCompareProgram. " " g:rvTempDir. g:rvDirSeparator. bufname("%") . " " . bufname("%")
+    sil execute "!".g:rvCompareProgram." " g:rvFileQuote.l:tmpfile.g:rvFileQuote.' '.g:rvFileQuote.bufname("%").g:rvFileQuote
 
 endfunction
