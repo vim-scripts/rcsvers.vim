@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/03/10 10:07:13 $
-"      Version: $Revision: 1.11 $
+"  Last Change: $Date: 2003/03/17 17:27:36 $
+"      Version: $Revision: 1.12 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -57,10 +57,15 @@
 " installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
 " in your path.
 "
-" rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
+" rcs-menu.vim by Jeff Lanzarotta is handy to have along with this
+" (vimscript #41).
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.12  Script will not load if the 'cp' flag is set. Added the option to
+"       use an exclude expression, and include expression. Fixed yet more bugs
+"       thanks to Roger for all the beta testing.
 "
 " 1.11  Minor bug fix, when using spaces in the description. Also added some
 "       error detection code to check and see that RCS and CI where
@@ -96,7 +101,7 @@
 " 1.3   option to select the rcs directory,
 "       and better comments thanks to Juan Frias
 "
-" Options: {{{1
+" User Options: {{{1
 "------------------------------------------------------------------------------
 "
 " <Leader>rlog
@@ -152,7 +157,7 @@
 "           1 = Single directory for all files
 "           2 = Save in current directory (same as the original file)
 "
-"       NoTE: If using g:rvSaveDirectoryType = 2 make sure you use
+"       Note: If using g:rvSaveDirectoryType = 2 make sure you use
 "             a suffix or the script might overwrite your file.
 "
 " g:rvSaveDirectoryName
@@ -204,47 +209,78 @@
 "           let g:rvDescription = <description>
 "       in your vimrc file.
 "
+" g:rvExcludeExpression
+"       This expression is evaluated with the function 'match'. The script
+"       tests the expression against the full file name and path of the file
+"       being saved. If the expression is found in the file name then the
+"       script will NOT create an RCS file for it. The default is an empty
+"       string, in which case no checking is done. To overwrite use:
+"           let g:rvExcludeExpression = <your expression>
+"       in your vimrc file.
+"
+"       Example: The expression below will exclude files containing .usr and
+"       .tmp in their file names. The '\c' is used to ignore case. Note that
+"       this is evaluated against the full file name and path so if you have
+"       the file '/home/joe/.tmp/hi.txt' the script will not generate an RCS
+"       file since '.tmp' is found in the path.
+"
+"           let g:rvExcludeExpression = '\c\.usr\|\c\.tmp'
+"
+"       Type ':help match' for help on how to setup an expression. In this
+"       script {exp} will be the file name and path, and {pat} will be the
+"       expression you provide.
+"
+" g:rvIncludeExpression
+"       This expression is evaluated with the function 'match'. The script
+"       test the expression against the full file name and path of the file
+"       begin saved. If the expression is found in the file name, then the
+"       script will create an RCS file for it, but if it's not found it will
+"       NOT. The default is an empty string, in which case no checking is done
+"       and all files will generate an RCS file except if an exclude
+"       expression is present, see g:rvExcludeExpression for a sample
+"       expression.
 "
 
-" Setup Global variables {{{1
-"--------------------------------------------------------------------------
+" Global variables: {{{1
+"------------------------------------------------------------------------------
 
 " Load script once
-"--------------------------------------------------------------------------
-if exists("loaded_rcsvers")
+"------------------------------------------------------------------------------
+if exists("loaded_rcsvers") || &cp
     finish
 endif
 let loaded_rcsvers = 1
 
 
 " Set additional RCS options
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvRcsOptions')
     let g:rvRcsOptions = "-ko"
 endif
 
 " Set additional ci options
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvCiOptions')
     let g:rvCiOptions = ""
 endif
 
 " Set initial description and version message.
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvDescription')
     let g:rvDescription = "vim"
 endif
 
 " Set the compare program
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvCompareProgram')
     let g:rvCompareProgram = "diff"
 endif
 
 " Set the directory separator
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvDirSeparator')
-    if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+    if has("win32") || has("win16") || has("dos32")
+                \ || has("dos16") || has("os2")
         let g:rvDirSeparator = "\\"
 
     elseif has("mac")
@@ -256,9 +292,10 @@ if !exists('g:rvDirSeparator')
 endif
 
 " Set file name quoting
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvFileQuote')
-    if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+    if has("win32") || has("win16") || has("dos32")
+                \ || has("dos16") || has("os2")
         let g:rvFileQuote = '"'
 
     else " *nix systems
@@ -267,9 +304,10 @@ if !exists('g:rvFileQuote')
 endif
 
 " Set the temp directory
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvTempDir')
-    if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+    if has("win32") || has("win16") || has("dos32")
+                \ || has("dos16") || has("os2")
         let g:rvTempDir = expand("$temp")
     else
         let g:rvTempDir = g:rvDirSeparator."tmp"
@@ -278,9 +316,10 @@ endif
 
 
 " Skip vim's rcs file name
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvSkipVimRcsFileName')
-    if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+    if has("win32") || has("win16") || has("dos32")
+                \ || has("dos16") || has("os2")
         let g:rvSkipVimRcsFileName = "_novimrcs"
     else
         let g:rvSkipVimRcsFileName = ".novimrcs"
@@ -289,29 +328,36 @@ endif
 
 
 " Set where the files are saved
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvSaveDirectoryType')
     let g:rvSaveDirectoryType = 0
 endif
 
 
 " Set the name of the directory to save RCS files to
-"--------------------------------------------------------------------------
-if !exists('g:rvSaveDirectoryName')
-    if g:rvSaveDirectoryType == 0
-        let g:rvSaveDirectoryName = strpart(expand("%:p"), 0, strridx(expand("%:p"), g:rvDirSeparator) + 1)."RCS"
+"------------------------------------------------------------------------------
+"
+function! s:GetSaveDirectoryName()
 
-    elseif g:rvSaveDirectoryType == 1
-        let g:rvSaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles"
+	if !exists('g:rvSaveDirectoryName')
+    	if g:rvSaveDirectoryType == 0
+        	let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
+	
+    	elseif g:rvSaveDirectoryType == 1
+        	let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
+	
+    	else " Type 2
+        	let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
+    	endif
+	else
+		return g:rvSaveDirectoryName
+	endif
 
-    else " Type 2
-        let g:rvSaveDirectoryName = strpart(expand("%:p"), 0, strridx(expand("%:p"), g:rvDirSeparator))
-
-    endif
-endif
+	return l:SaveDirectoryName
+endfunction
 
 " Set the suffix type
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if !exists('g:rvSaveSuffixType')
     if g:rvSaveDirectoryType == 0
         let g:rvSaveSuffixType = 1
@@ -321,22 +367,35 @@ if !exists('g:rvSaveSuffixType')
 endif
 
 " Set default user defined suffix
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 if (g:rvSaveSuffixType == 4) && (!exists('g:rvSaveSuffix'))
     let g:rvSaveSuffix = ",v"
 endif
 
+" Set the default Exclude expression
+"------------------------------------------------------------------------------
+if !exists('g:rvExcludeExpression')
+    let g:rvExcludeExpression = ""
+endif
+
+" Set the default Include expression
+"------------------------------------------------------------------------------
+if !exists('g:rvIncludeExpression')
+    let g:rvIncludeExpression = ""
+endif
+
 " Hook Save RCS function to events
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 augroup rcsvers
    au!
    let s:types = "*"
-   exe "au BufWritePost,FileWritePost,FileAppendPost ".s:types." call s:rcsvers_post()"
+   exe "au BufWritePost,FileWritePost,FileAppendPost ".
+               \ s:types." call s:rcsvers_post()"
 augroup END
 
 
 " Generate suffix
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 function! s:CreateSuffix()
     if g:rvSaveSuffixType == 0
         return ""
@@ -356,9 +415,8 @@ function! s:CreateSuffix()
     endif
 endfunction
 
-
 " Function: Write the RCS {{{1
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 function! s:rcsvers_post()
 
     " Exclude directories from versioning, by putting skip file there.
@@ -366,13 +424,27 @@ function! s:rcsvers_post()
         return
     endif
 
+    " Exclude file from versioning if matches exclude expression.
+    if 0 != strlen(g:rvExcludeExpression) &&
+            \ -1 != match(expand("%:p"), g:rvExcludeExpression)
+        return
+    endif
+
+    " Include file for versioning if matches include expression.
+    if 0 != strlen(g:rvIncludeExpression) &&
+            \ -1 == match(expand("%:p"), g:rvIncludeExpression)
+        return
+    endif
+
     let l:suffix = s:CreateSuffix()
 
+	let l:SaveDirectoryName = s:GetSaveDirectoryName()
+
     " Create RCS dir if it doesn't exist
-    if (g:rvSaveDirectoryType != 2) && (!isdirectory(g:rvSaveDirectoryName))
-        let l:returnval = system("mkdir ".g:rvSaveDirectoryName)
+    if (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
+        let l:returnval = system("mkdir ".l:SaveDirectoryName)
         if ( l:returnval != "" )
-            let l:err = "Could not create rcs directory: ".g:rvSaveDirectoryName
+            let l:err = "Error creating rcs directory: ".l:SaveDirectoryName
             let l:err = l:err."\nThe error was: ".l:returnval
             echo l:err
             return
@@ -380,7 +452,7 @@ function! s:rcsvers_post()
     endif
 
     " Generate name of RCS file
-    let l:rcsfile = g:rvSaveDirectoryName.g:rvDirSeparator.expand("%:t").l:suffix
+    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
     " ci options are as follows:
     " -i        Initial check in
@@ -402,9 +474,15 @@ function! s:rcsvers_post()
         if ( v:shell_error == -1 )
             echo "Command could not be executed."
         elseif ( v:shell_error != 0 )
-            echo "Error executing command."
+            echo "*** Error executing command."
+            echo "Command was:"
+            echo "--- beg --"
             echo l:cmd
+            echo "--- end --"
+            echo "Output:"
+            echo "--- beg --"
             echo l:output
+            echo "--- end --"
         endif
     endif
 
@@ -425,19 +503,35 @@ function! s:rcsvers_post()
     if ( v:shell_error == -1 )
         echo "Command could not be executed."
     elseif ( v:shell_error != 0 )
-        echo "Error executing command."
+        echo "*** Error executing command."
+        echo "Command was:"
+        echo "--- beg --"
         echo l:cmd
+        echo "--- end --"
+        echo "Output:"
+        echo "--- beg --"
         echo l:output
+        echo "--- end --"
     endif
 
 endfunction
 
 
 " Function: Display the revision log {{{1
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 function! s:DisplayLog()
     let l:suffix = s:CreateSuffix()
-    let l:rcsfile = g:rvSaveDirectoryName.g:rvDirSeparator.bufname("%").l:suffix
+	
+	"save the current directory, in case they automatically change dir when opening files
+	let l:savedir = expand("%:p:h") 
+
+    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+
+    " Check for an RCS file
+    if (getfsize(l:rcsfile) == -1)
+        echo "Error: No RCS file found! (".l:rcsfile.")"
+        return
+    endif
 
     " Create the command
     let l:cmd = "rlog"
@@ -449,9 +543,9 @@ function! s:DisplayLog()
     let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " This is the name of the buffer that holds the revision log list.
-    let l:bufferName = "RevisionLog"
+    let l:bufferName = g:rvTempDir.g:rvDirSeparator."RevisionLog"
 
-    " If a buffer with the name rlog exists, delete it.
+    " If a buffer with the name RevisionLog exists, delete it.
     if bufexists(l:bufferName)
     sil! exe 'bd! ' l:bufferName
     endif
@@ -463,61 +557,71 @@ function! s:DisplayLog()
     " Map <enter> to compare current file to that version
     nnoremap <buffer> <CR> :call <SID>CompareFiles()<CR>
 
+	"change dir to the original file dir, in case they auto change dir
+	"when opening files
+	exec "cd " . l:savedir 
+
     " Execute the command.
     sil! exe 'r!' l:cmd
 
-    " Remove any line not matching 'date' or 'revision'
     let l:lines = line("$")
-    while l:lines
-        if getline(l:lines) !~ "^\\(date\\|revision\\).*"
-            exe l:lines.",".l:lines."d"
-        endif
-        let l:lines = l:lines - 1
-    endwhile
 
-    " Format date and revision into a single line.
-    let l:lines = line("$")
-    let l:curr_line = 1
-    while l:curr_line < (l:lines / 2) + 1
+    " If there is less than 10 lines then there was
+    " probably an error.
+    if l:lines > 10
 
-        " Join the revison to the date...
-        normal J
+        " Remove any line not matching 'date' or 'revision'
+        while l:lines
+            if getline(l:lines) !~ "^\\(date\\|revision\\).*"
+                exe l:lines.",".l:lines."d"
+            endif
+            let l:lines = l:lines - 1
+        endwhile
+
+        " Format date and revision into a single line.
+        let l:lines = line("$")
+        let l:curr_line = 0
+
+        while l:curr_line <= l:lines
+            " Join the revision to the date...
+            normal Jj
+            let l:curr_line = l:curr_line + 2
+        endwhile
 
         " and format as: 'revision: date time'
-        let l:text = getline(".")
-        let l:text = substitute(l:text,
-            \ "revision\\s\\+\\([0-9.]\\+\\).*date\\(:[^;]\\+\\).\\+",
-            \ "\\1\\2", "g")
+        sil! exe ":%s/revision\\s\\+\\([0-9.]\\+\\).\*".
+                    \"date\\(:[^;]\\+\\).\\+/\\1\\2/g"
 
-        " Delete the current line, insert ours, and move to the next one.
-        exe "normal ddO".l:text."\<esc>"
-        normal j
+        " Go to about the beginning of the buffer.
+        sil! exe "normal 2G"
 
-        let l:curr_line = l:curr_line + 1
-    endwhile
+    endif
 
-    " Make is so that the file can't be edited.
+    " Make it so that the file can't be edited.
     setlocal nomodified
     setlocal nomodifiable
     setlocal readonly
 
-    " Go to about the beginning of the buffer.
-    sil! exe "normal 2G"
 endfunction
 
 
 " Function: Compare the current file to the selected revision {{{1
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 function! s:CompareFiles()
 
     " Get just the revision number
-    let l:revision = substitute(getline("."), "^\\([.0-9]\\+\\).\\+", "\\1", "g")
+    let l:revision = substitute(getline("."),
+                \"^\\([.0-9]\\+\\).\\+", "\\1", "g")
 
     " Close the revision log, This will send us back to the original file.
     sil! exe "bd!"
 
     let l:suffix = s:CreateSuffix()
-    let l:rcsfile = g:rvSaveDirectoryName.g:rvDirSeparator.bufname("%").l:suffix
+	
+	"save the current directory, in case they automatically change dir when opening files
+	let l:savedir = expand("%:p:h") 
+
+    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
     " Build command
     "
@@ -534,14 +638,19 @@ function! s:CompareFiles()
         let l:cmd = l:cmd." -x".l:suffix
     endif
 
-    let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+    let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." ".
+                \g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " Create a new buffer to place the co output
-    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".bufname("%")
+    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t")
     sil! exe "new ".l:tmpfile
 
     " Delete the contents if it's not empty
     sil! exe "1,$d"
+
+	"change dir to the original file dir, in case they auto change dir
+	"when opening files
+	exec "cd " . l:savedir 
 
     " Run the command and capture the output
     sil! exe "silent r!".l:cmd
@@ -551,14 +660,15 @@ function! s:CompareFiles()
     sil! exe "bd!"
 
     " Execute the compare program.
-    sil exe "!".g:rvCompareProgram." " g:rvFileQuote.l:tmpfile.g:rvFileQuote.' '.g:rvFileQuote.bufname("%").g:rvFileQuote
+    sil exe "!".g:rvCompareProgram." " g:rvFileQuote.l:tmpfile.
+                \g:rvFileQuote.' '.g:rvFileQuote.bufname("%").g:rvFileQuote
 
 endfunction
 
 "}}}1
 
 " Default key mapping to generate revision log.
-"--------------------------------------------------------------------------
+"------------------------------------------------------------------------------
 nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
 
-" vim600: set foldmethod=marker :
+" vim600: tw=78 : set foldmethod=marker :
