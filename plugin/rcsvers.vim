@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2004/02/17 10:28:03 $
-"      Version: $Revision: 1.18 $
+"  Last Change: $Date: 2004/06/04 20:32:35 $
+"      Version: $Revision: 1.19 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -82,6 +82,11 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.19  Added the option to prompt the user for file and check-in message on
+"       every save. See rvDescMsgPrompt option for details. Thanks to Kevin
+"       Stegemoller for the suggestion. Also \rlog will now display the
+"       check-in message in the pick list for easier identification.
 "
 " 1.18  Added the option to save an RCS version only if the RCS file already
 "       exists (No new RCS files will be created). (from Marc Schoechlin)
@@ -219,7 +224,7 @@
 "       Note: If using g:rvSaveDirectoryType = 2 make sure you use
 "             a suffix (see g:rvSaveSuffixType) or the script might overwrite
 "             your file.
-
+"
 " g:rvSaveIfPreviousRCSFileExists
 "       This specifies that RCS files will only be saved if the a previous
 "       RCS file is present for the file being edited. If the RCS file
@@ -297,6 +302,14 @@
 "           let g:rvDescription = <description>
 "       in your vimrc file.
 "
+" g:rvDescMsgPrompt
+"       This determines if you will be prompted for a description or a checkin
+"       message when you save the file. Default is no prompt. To have the
+"       script prompt, set this to a non-zero value in your vimrc file.
+"       e.g.
+"           " prompt on every save
+"           let g:rvDescMsgPrompt = 1
+"
 " g:rvExcludeExpression
 "       This expression is evaluated with the function 'match'. The script
 "       tests the expression against the full file name and path of the file
@@ -364,6 +377,15 @@ endif
 "------------------------------------------------------------------------------
 if !exists('g:rvDescription')
     let g:rvDescription = "vim"
+else
+    "quote out any quote chars in the description
+    let g:rvDescription= substitute(g:rvDescription,'"','\\"',"g")
+endif
+
+" Set default for description/message prompt
+"------------------------------------------------------------------------------
+if !exists('g:rvDescMsgPrompt')
+    let g:rvDescMsgPrompt = 0
 endif
 
 " Set the compare program
@@ -622,6 +644,36 @@ function! s:rcsvers(type)
         return
     endif
 
+    " Handle description/message prompts
+    if (g:rvDescMsgPrompt != 0)
+
+        " If RCS file doesn't exist ask for description.
+        if (getfsize(l:rcsfile) == -1)
+            let l:description = input("(rcsvers.vim) Description for this file: ")
+            "quote out any quote chars in the description
+            let l:description = substitute(l:description,'"','\\"',"g")
+            if (l:description == "")
+                let l:description = g:rvDescription
+            endif
+        endif
+
+        " Ask for the message for this version.
+        if (a:type == "post")
+            let l:message = input("(rcsvers.vim) Check-in message for this version: ")
+            "quote out any quote chars in the message
+            let l:message = substitute(l:message,'"','\\"',"g")
+            if (l:message == "")
+                let l:message = g:rvDescription
+            endif
+        else
+            " Don't ask for message on "pre" or we'll get doubly prompted.
+            let l:message = g:rvDescription
+        endif
+    else
+        let l:description = g:rvDescription
+        let l:message = g:rvDescription
+    endif
+
     " ci options are as follows:
     " -i        Initial check in
     " -l        Check out and lock file after check in.
@@ -631,7 +683,7 @@ function! s:rcsvers(type)
 
     if (getfsize(l:rcsfile) == -1)
         " Initial check-in, create an empty RCS file
-        let l:cmd = "rcs -i -t-\"".g:rvDescription."\" ".g:rvRcsOptions
+        let l:cmd = "rcs -i -t-\"".l:description."\" ".g:rvRcsOptions
 
         if (g:rvSaveSuffixType != 0)
             let l:cmd = l:cmd." -x".l:suffix
@@ -660,7 +712,7 @@ function! s:rcsvers(type)
         endif
     endif
 
-    let l:cmd = "ci -l -m\"".g:rvDescription."\" ".g:rvCiOptions
+    let l:cmd = "ci -l -m\"".l:message."\" ".g:rvCiOptions
 
     if (g:rvSaveSuffixType != 0)
         let l:cmd = l:cmd." -x".l:suffix
@@ -751,6 +803,9 @@ function! s:DisplayLog()
     " probably an error.
     if l:lines > 10
 
+        " Add the comment to the end of date so we save them
+        sil exe ":%s/^date: .*$/\\0\\~/"
+        sil exe ":g/^date: /j"
         " Remove any line not matching 'date' or 'revision'
         sil exe ":g!/^revision\\|^date/d"
         sil exe "normal 1G"
@@ -766,7 +821,10 @@ function! s:DisplayLog()
 
         " and format as: 'revision: date time'
         sil! exe ":%s/revision\\s\\+\\([0-9.]\\+\\).\*".
-                    \"date\\(:[^;]\\+\\).\\+/\\1\\2/g"
+                    \"date\\(:[^;]\\+\\)[^~]\\+./\\1\\2/g"
+
+        " Remove default "vim" descriptions or rvDescription
+        sil! exe ":%s/\\s".g:rvDescription."$//g"
 
         " Go to about the beginning of the buffer.
         sil! exe "normal 1Gj"
@@ -778,6 +836,7 @@ function! s:DisplayLog()
     setlocal noswapfile
     setlocal nomodifiable
     setlocal readonly
+    setlocal nowrap
 
 endfunction
 
@@ -943,5 +1002,4 @@ nnoremap <Leader>older :call <SID>NextCompareFiles("older")<cr>
 nnoremap <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
 let &cpo = s:save_cpo
-" vim600:tw=78:set fdm=marker:
-
+" vim600:tw=78:set fdm=marker: ff=unix:
