@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/05/05 13:39:32 $
-"      Version: $Revision: 1.13 $
+"  Last Change: $Date: 2003/05/22 13:16:05 $
+"      Version: $Revision: 1.14 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -49,20 +49,25 @@
 " Vim plugin for automatically saving backup versions in rcs
 " whenever a file is saved.
 "
-" What's RCS? See http://www.gnu.org/software/rcs/rcs.html
+" What's RCS? See <a href='http://www.gnu.org/software/rcs/rcs.html'>http://www.gnu.org/software/rcs/rcs.html</a>
 "
 " Be careful if you really use RCS as your production file control, it
 " will add versions like crazy. See options bellow for work around.
 "
 " If you're using Microsoft Windows, then the rcs programs are available by
-" installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
-" in your path.
+" installing WinCVS (<a href='http://www.wincvs.org/'>http://www.wincvs.org/</a>), 
+" and putting the wincvs directory in your path.
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this
 " (vimscript #41).
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.14  Add option to set "rlog" command-line options.  fix rlog display,
+"       which would crash once in a while saying stuff like "10,10d invalid
+"       range". When creating a new RCS file on an existing text file, save a
+"       version before adding the new revision.
 "
 " 1.13  A g:rvFileQuote fix, suggested by Wiktor Niesiobedzki.  Add the
 "       ability to use the current instance of vim for the diff, which is now
@@ -159,7 +164,7 @@
 "       in your vimrc file.
 "
 " g:rvSaveDirectoryType
-"       This specifies how the script will save the RCS files. by default
+"       This specifies how the script will save the RCS files. By default
 "       they will be saved under the current directory (under RCS). To
 "       overwrite use:
 "           let g:rvSaveDirectoryType = 1
@@ -213,6 +218,18 @@
 "       for additional options to pass. To overwrite use:
 "           let g:rvRcsOptions = <options>
 "       in your vimrc file.
+" 
+" g:rvRlogOptions
+"       This specifies additional options to send to rlog (history displaying
+"       program). By default this is set to '' to avoid surprising you. 
+"       Refer to RCS documentation for additional options to pass. 
+"       To override use:
+"           let g:rvRlogOptions = <options>
+"       in your vimrc file.
+"       e.g. 
+"       	" show the log using the local timezone
+"           let g:rvRlogOptions = "-zLT"
+"
 "
 " g:rvDescription
 "       This allows you to set your initial description and version
@@ -274,6 +291,13 @@ endif
 if !exists('g:rvCiOptions')
     let g:rvCiOptions = ""
 endif
+
+" Set additional rlog options
+"------------------------------------------------------------------------------
+if !exists('g:rvRlogOptions')
+    let g:rvRlogOptions = ""
+endif
+
 
 " Set initial description and version message.
 "------------------------------------------------------------------------------
@@ -395,7 +419,9 @@ augroup rcsvers
    au!
    let s:types = "*"
    exe "au BufWritePost,FileWritePost,FileAppendPost ".
-               \ s:types." call s:rcsvers_post()"
+               \ s:types." call s:rcsvers(\"post\")"
+   exe "au BufWritePre,FileWritePre,FileAppendPre ".
+               \ s:types." call s:rcsvers(\"pre\")"
 augroup END
 
 augroup rcsvers
@@ -436,7 +462,13 @@ endfunction
 
 " Function: Write the RCS {{{1
 "------------------------------------------------------------------------------
-function! s:rcsvers_post()
+function! s:rcsvers(type)
+
+    " If this is a new file that hasn't been saved then we
+    " can't create a previous entry so just exit.
+    if a:type == "pre" && !filereadable(expand("%:p")) && !exists("modified")
+        return
+    endif
 
     " Exclude directories from versioning, by putting skip file there.
     if filereadable( expand("%:p:h").g:rvDirSeparator.g:rvSkipVimRcsFileName )
@@ -503,6 +535,12 @@ function! s:rcsvers_post()
             echo l:output
             echo "--- end --"
         endif
+    else
+        " We only need to do a pre-save if the RCS file
+        " does not exist.
+        if a:type == "pre"
+            return
+        endif
     endif
 
     let l:cmd = "ci -l -m\"".g:rvDescription."\" ".g:rvCiOptions
@@ -559,7 +597,7 @@ function! s:DisplayLog()
     endif
 
     " Create the command
-    let l:cmd = "rlog"
+    let l:cmd = "rlog ".g:rvRlogOptions
 
     if (g:rvSaveSuffixType != 0)
         let l:cmd = l:cmd." -x".l:suffix
@@ -597,14 +635,9 @@ function! s:DisplayLog()
     if l:lines > 10
 
         " Remove any line not matching 'date' or 'revision'
-        while l:lines
-            if getline(l:lines) !~ "^\\(date\\|revision\\).*"
-                exe l:lines.",".l:lines."d"
-            endif
-            let l:lines = l:lines - 1
-        endwhile
-
-        " Format date and revision into a single line.
+        sil exe ":g!/^revision\\|^date/d"
+        sil exe "normal 1G"
+"       Format date and revision into a single line.
         let l:lines = line("$")
         let l:curr_line = 0
 
