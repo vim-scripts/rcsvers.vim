@@ -1,48 +1,94 @@
 " rcsvers.vim
-" Author: Roger Pilkey (rpilkey at magma.ca)
-" Last Change: 2003 Feb 12
-" Version: 1.0
+" Maintainer: Roger Pilkey (rpilkey at magma.ca)
+" $Author: rpilkey $
+" $Date: 2003/02/19 14:46:19 $
+" $Revision: 1.27 $
+" $Id: rcsvers.vim,C__Vim_vimfiles_plugin 1.27 2003/02/19 14:46:19 rpilkey Exp rpilkey $
 "
-" Vim plugin for automatically saving backup versions in rcs 
+"
+" Vim plugin for automatically saving backup versions in rcs
 " whenever a file is saved.
 "
 " What's RCS? See http://www.gnu.org/software/rcs/rcs.html
 "
-" Don't use this if you really use RCS as your production file control, it
+" Be careful if you really use RCS as your production file control, it
 " will add versions like crazy.
 "
 " If you're using Microsoft Windows, then the rcs programs are available by
-" installing WinCVS (http://www.wincvs.org/)
+" installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
+" in your path.
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this.
-" 
 "
+" To Do: add version/diff viewing tools like savevers.vim
+"
+" Changes:
+" 1.2 	option to select the rcs directory,
+" 		and better comments thanks to Juan Frias
+" 
+if exists("loaded_rcsvers")
+	finish
+endif
+let loaded_rcsvers = 1
+
 augroup rcsvers
-   au!
-   let s:types = "*"
-   exe "au BufWritePost,FileWritePost,FileAppendPost " . s:types . " call s:rcsvers_post()"
+	au!
+	let s:types = "*"
+	exe "au BufWritePost,FileWritePost,FileAppendPost " . s:types . " call s:rcsvers_post()"
 augroup END
 
 
 function! s:rcsvers_post()
-	if ! isdirectory("RCS")
-		let l:val = system("mkdir RCS")
-	endif
-	let l:rcsfile = "RCS/" . bufname("%") . ",v"
-	if (getfsize(l:rcsfile) == -1)
-		let l:cmd = "ci -i -t- "
+	"set the directory separator
+	if has("win32") || has("win16") || has("dos32") || has("dos16") || has("os2")
+		let l:sep = "\\"
 	else
-		let l:cmd = "ci -mvim_rcsvers "
+		let l:sep = "\/"
 	endif
-	let l:cmd = l:cmd . bufname("%") 
-	let l:val = system(l:cmd)
 
-	"check out with no keyword substitution.
-	"if you want keyword substitution, drop the -ko
-	"I did this so that this backup hack wouldn't interfere
-	"with your real source code control keywords
-	let l:cmd = "co -q -ko -l "
-	let l:cmd = l:cmd . bufname("%")
-	let l:val = system(l:cmd)
+	" Path where all RCS files will be saved to
+	" use this to have one directory for all rcs files
+	" (duplicate filenames may cause a problem, use the unique suffix below)
+	let l:rcsdir = $VIM . l:sep . "RCSFiles"
+	
+	" or use the RCS directory under the current directory
+	"let l:rcsdir = "RCS"
+	
+	" Create a suffix to make unique rcs files when files that are
+	" in different directories have the same name
+	let l:suffix = "," . expand("%:p:h:gs?\[:/ \\\\]?_?")
+	
+	" or use the regular suffix
+	"let l:suffix = ",v"
+
+	" Create RCS dir if it doesn't exist
+	if ! isdirectory(l:rcsdir)
+		let l:returnval = system("mkdir " . l:rcsdir)
+		if ( l:returnval != "" )
+			let l:err = "Could not create rcs directory: " . l:rcsdir . "\nThe error was: " . l:returnval
+			let l:returnval = confirm(l:err, "&Okay")
+		endif
+	endif
+	
+	" Generate name of RCS file
+	let l:rcsfile = l:rcsdir . l:sep . bufname("%") . l:suffix
+
+	" ci options are as follows:
+	" -i        Initial check in
+	" -l        Check out and lock file after check in.
+	" -t-       File description at initial check in.
+	" -x        Suffix to use for rcs files.
+	" -m        Log message
+
+	if (getfsize(l:rcsfile) == -1)
+		" Initial check-in note: -i -t-
+		let l:cmd = "ci -i -l -t- -x" . l:suffix
+	else
+		" Subsequent check-ins note: -m
+		let l:cmd = "ci -l -mvim_rcsvers -x" . l:suffix
+	endif
+	" Build command string <command> <filename> <rcs file>
+	let l:cmd = l:cmd . " " . bufname("%") . " " . l:rcsfile
+	let l:returnval = system(l:cmd)
+
 endfunction
-
