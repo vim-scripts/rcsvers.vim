@@ -1,30 +1,50 @@
-"    Copyright: Permission is hereby granted to use and distribute this code,
-"               with or without modifications, provided that this copyright
-"               notice is copied with it. Like anything else that's free,
-"               this script is provided *as is* and comes with no
-"               warranty of any kind, either expressed or implied. In no
-"               event will the author(s) be liable for any damages
-"               resulting from the use of this script.
-"
+"------------------------------------------------------------------------------
 " Name Of File: rcsvers.vim
+"
 "  Description: Vim plugin to automatically save backup versions in RCS
+"               whenever a file is saved.
+"
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
-"  Last Change: $Date: 2003/03/03 18:14:45 $
-"      Version: $Revision: 1.10 $
 "
-"        Usage: Normally, this file should reside in the plugins directory.
+"  Last Change: $Date: 2003/03/10 10:07:13 $
+"      Version: $Revision: 1.11 $
 "
-"  Mapped Keys: <Leader>rlog To access saved revisions. Note sed and grep
-"               are needed for this operation se bellow for a website if
-"               you are using Dos/win.
+"    Copyright: Permission is hereby granted to use and distribute this code,
+"               with or without modifications, provided that this header
+"               is included with it.
 "
-"--------------------------------------------------------------------------
+"               This script is to be distributed freely in the hope that it
+"               will be useful, but is provided 'as is' and without warranties
+"               as to performance of merchantability or any other warranties
+"               whether expressed or implied. Because of the various hardware
+"               and software environments into which this script may be put,
+"               no warranty of fitness for a particular purpose is offered.
 "
-" Please send me any bugs so I can keep the script up to date.
+"               GOOD DATA PROCESSING PROCEDURE DICTATES THAT ANY SCRIPT BE
+"               THOROUGHLY TESTED WITH NON-CRITICAL DATA BEFORE RELYING ON IT.
 "
-"--------------------------------------------------------------------------
+"               THE USER MUST ASSUME THE ENTIRE RISK OF USING THE SCRIPT.
 "
+"               The author and maintainer do not retain any liability on any
+"               damage caused through the use of this script.
+"
+"      Install: 1. Read the section titled 'Options'
+"               2. Setup any variables need in your vimrc file
+"               3. Copy 'rcsvers.vim' to your plugin directory.
+"
+"  Mapped Keys: <Leader>rlog    To access saved revisions log.
+"
+"               <enter>         This will compare the current file to the
+"                               revision under the cursor (works only in
+"                               the revision log window)
+"
+"------------------------------------------------------------------------------
+" Please send me any bugs you find, so I can keep the script up to date.
+"------------------------------------------------------------------------------
+"
+" Additional Information: {{{1
+"------------------------------------------------------------------------------
 " Vim plugin for automatically saving backup versions in rcs
 " whenever a file is saved.
 "
@@ -37,10 +57,15 @@
 " installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
 " in your path.
 "
-" The sed and grep programs for Windows are available for free here:
-" http://unxutils.sourceforge.net/
-"
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
+"
+" History: {{{1
+"------------------------------------------------------------------------------
+"
+" 1.11  Minor bug fix, when using spaces in the description. Also added some
+"       error detection code to check and see that RCS and CI where
+"       successful. And removed requirements for SED and GREP, script will no
+"       longer need these to display the log.
 "
 " 1.10  Fixed some major bugs with files with long filenames and spaces
 "       Win/Dos systems. Added a variable to pass additional options to the
@@ -71,18 +96,12 @@
 " 1.3   option to select the rcs directory,
 "       and better comments thanks to Juan Frias
 "
-"--------------------------------------------------------------------------
-"
-" Options are as follows:
+" Options: {{{1
+"------------------------------------------------------------------------------
 "
 " <Leader>rlog
 "       This is the default key map to display the revision log. search
 "       for 'key' to overwrite this key.
-"
-"       IMPORTANT: If you are going to use the display/compare log
-"                  key you must have 'grep' and 'sed' installed on
-"                  your system as these are used to generate the
-"                  revision list.
 "
 " g:rvCompareProgram
 "       This is the program that will be called to compare two files,
@@ -91,7 +110,7 @@
 "           let g:rvCompareProgram = <your compare program>
 "       in your vimrc file. Win32 users you may want to use:
 "           let g:rvCompareProgram = start <your program>
-"       for an asynchronous run type :help :!start for details.
+"       for an asynchronous run, type :help :!start for details.
 "
 " g:rvFileQuote
 "       This is the character used to enclose filenames when calling the
@@ -184,9 +203,11 @@
 "       message. The default value is 'vim'. To overwrite use:
 "           let g:rvDescription = <description>
 "       in your vimrc file.
+"
+"
 
+" Setup Global variables {{{1
 "--------------------------------------------------------------------------
-
 
 " Load script once
 "--------------------------------------------------------------------------
@@ -194,11 +215,6 @@ if exists("loaded_rcsvers")
     finish
 endif
 let loaded_rcsvers = 1
-
-
-" Default key mapping to generate revision log.
-"--------------------------------------------------------------------------
-map <Leader>rlog :call <SID>DisplayLog()<cr>
 
 
 " Set additional RCS options
@@ -341,7 +357,7 @@ function! s:CreateSuffix()
 endfunction
 
 
-" Write the RCS
+" Function: Write the RCS {{{1
 "--------------------------------------------------------------------------
 function! s:rcsvers_post()
 
@@ -375,17 +391,24 @@ function! s:rcsvers_post()
 
     if (getfsize(l:rcsfile) == -1)
         " Initial check-in, create an empty RCS file
-        let l:cmd = "rcs -i -t-".g:rvDescription." ".g:rvRcsOptions
+        let l:cmd = "rcs -i -t-\"".g:rvDescription."\" ".g:rvRcsOptions
 
         if (g:rvSaveSuffixType != 0)
             let l:cmd = l:cmd." -x".l:suffix
         endif
 
         let l:cmd = l:cmd." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
-        let l:xx = system(l:cmd)
+        let l:output = system(l:cmd)
+        if ( v:shell_error == -1 )
+            echo "Command could not be executed."
+        elseif ( v:shell_error != 0 )
+            echo "Error executing command."
+            echo l:cmd
+            echo l:output
+        endif
     endif
 
-    let l:cmd = "ci -l -m".g:rvDescription." ".g:rvCiOptions
+    let l:cmd = "ci -l -m\"".g:rvDescription."\" ".g:rvCiOptions
 
     if (g:rvSaveSuffixType != 0)
         let l:cmd = l:cmd." -x".l:suffix
@@ -398,23 +421,23 @@ function! s:rcsvers_post()
         let l:cmd = l:cmd." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
     endif
 
-    return system(l:cmd)
+    let l:output = system(l:cmd)
+    if ( v:shell_error == -1 )
+        echo "Command could not be executed."
+    elseif ( v:shell_error != 0 )
+        echo "Error executing command."
+        echo l:cmd
+        echo l:output
+    endif
 
 endfunction
 
 
-" Display the revision log
+" Function: Display the revision log {{{1
 "--------------------------------------------------------------------------
 function! s:DisplayLog()
     let l:suffix = s:CreateSuffix()
     let l:rcsfile = g:rvSaveDirectoryName.g:rvDirSeparator.bufname("%").l:suffix
-
-    " Grep will find all lines with revision and date in rlog output
-    let l:grepstr = "grep \"\\(^revision\\)\\|\\(^date\\)\""
-
-    " Sed will take each revision line and date line and combine them
-    " into one line stripping out the rest.
-    let l:sedstr = "sed -e \"N;s/\\n//g;s/revision \\+\\([0-9.]\\+\\)[\t a-zA-Z:;]*date\\(:[^;]\\+\\).\\+/\\1\\2/g\" -"
 
     " Create the command
     let l:cmd = "rlog"
@@ -423,7 +446,7 @@ function! s:DisplayLog()
         let l:cmd = l:cmd." -x".l:suffix
     endif
     let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." "
-    let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote." | ".l:grepstr." | ".l:sedstr
+    let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " This is the name of the buffer that holds the revision log list.
     let l:bufferName = "RevisionLog"
@@ -443,17 +466,47 @@ function! s:DisplayLog()
     " Execute the command.
     sil! exe 'r!' l:cmd
 
+    " Remove any line not matching 'date' or 'revision'
+    let l:lines = line("$")
+    while l:lines
+        if getline(l:lines) !~ "^\\(date\\|revision\\).*"
+            exe l:lines.",".l:lines."d"
+        endif
+        let l:lines = l:lines - 1
+    endwhile
+
+    " Format date and revision into a single line.
+    let l:lines = line("$")
+    let l:curr_line = 1
+    while l:curr_line < (l:lines / 2) + 1
+
+        " Join the revison to the date...
+        normal J
+
+        " and format as: 'revision: date time'
+        let l:text = getline(".")
+        let l:text = substitute(l:text,
+            \ "revision\\s\\+\\([0-9.]\\+\\).*date\\(:[^;]\\+\\).\\+",
+            \ "\\1\\2", "g")
+
+        " Delete the current line, insert ours, and move to the next one.
+        exe "normal ddO".l:text."\<esc>"
+        normal j
+
+        let l:curr_line = l:curr_line + 1
+    endwhile
+
     " Make is so that the file can't be edited.
     setlocal nomodified
     setlocal nomodifiable
     setlocal readonly
 
     " Go to about the beginning of the buffer.
-    sil! exe "normal 3G"
+    sil! exe "normal 2G"
 endfunction
 
 
-" Function to compare the current file to the selected revision
+" Function: Compare the current file to the selected revision {{{1
 "--------------------------------------------------------------------------
 function! s:CompareFiles()
 
@@ -501,3 +554,11 @@ function! s:CompareFiles()
     sil exe "!".g:rvCompareProgram." " g:rvFileQuote.l:tmpfile.g:rvFileQuote.' '.g:rvFileQuote.bufname("%").g:rvFileQuote
 
 endfunction
+
+"}}}1
+
+" Default key mapping to generate revision log.
+"--------------------------------------------------------------------------
+nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
+
+" vim600: set foldmethod=marker :
