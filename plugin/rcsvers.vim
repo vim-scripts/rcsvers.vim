@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2004/06/04 20:32:35 $
-"      Version: $Revision: 1.19 $
+"  Last Change: $Date: 2004/06/23 10:11:57 $
+"      Version: $Revision: 1.20 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -39,6 +39,10 @@
 "               <enter>         This will compare the current file to the
 "                               revision under the cursor (works only in
 "                               the revision log window)
+"
+"               <Leader>rci     This will create an initial RCS file. Useful
+"                               when you have the script set to save only when
+"                               a previous RCS file exists.
 "
 "               <Leader>older   does a diff with the previous version
 "
@@ -82,6 +86,12 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+"
+" 1.20  Added a mapping to create an initial RCS file. Useful when the script
+"       is set to save only when a previous RCS file exists. see
+"       rvSaveIfPreviousRCSFileExists (thanks to Steven Michalske for the
+"       suggestion) Added <silent> to the default mappings to keep the status
+"       bar clean.
 "
 " 1.19  Added the option to prompt the user for file and check-in message on
 "       every save. See rvDescMsgPrompt option for details. Thanks to Kevin
@@ -593,6 +603,13 @@ endfunction
 function! s:rcsvers(type)
 
     " If this is a new file that hasn't been saved then we
+    " can't create a check in entry.
+    if a:type =="init" && !filereadable(expand("%:p")) && !exists("modified")
+        echo "(rcsvers.vim) You need to save the file first!"
+        return
+    endif
+
+    " If this is a new file that hasn't been saved then we
     " can't create a previous entry so just exit.
     if a:type == "pre" && !filereadable(expand("%:p")) && !exists("modified")
         return
@@ -640,7 +657,7 @@ function! s:rcsvers(type)
     let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
     " Should we only save if RCS file exists?
-    if (g:rvSaveIfPreviousRCSFileExists == 1) && (getfsize(l:rcsfile) == -1)
+    if a:type != "init" && (g:rvSaveIfPreviousRCSFileExists == 1) && (getfsize(l:rcsfile) == -1)
         return
     endif
 
@@ -996,10 +1013,11 @@ endfunction
 " Default key mappings to generate a revision log, and diff with adjacent
 " versions.
 "------------------------------------------------------------------------------
-nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
+nnoremap <silent> <Leader>rlog :call <SID>DisplayLog()<cr>
+nnoremap <silent> <Leader>rci  :call <SID>rcsvers("init")<cr>
 
-nnoremap <Leader>older :call <SID>NextCompareFiles("older")<cr>
-nnoremap <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
+nnoremap <silent> <Leader>older :call <SID>NextCompareFiles("older")<cr>
+nnoremap <silent> <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
 let &cpo = s:save_cpo
-" vim600:tw=78:set fdm=marker: ff=unix:
+" vim600:tw=78:fdm=marker:ff=unix:
