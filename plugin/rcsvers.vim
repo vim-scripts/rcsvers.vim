@@ -5,10 +5,10 @@
 "               whenever a file is saved.
 "
 "       Author: Roger Pilkey (rpilkey at magma.ca)
-"   Maintainer: Juan Frias (frias.junk at earthlink.net)
+"   Maintainer: Juan Frias (frias.juan at comcast.net)
 "
-"  Last Change: $Date: 2004/07/15 10:11:57 $
-"      Version: $Revision: 1.21 $
+"  Last Change: $Date: 2005/03/04 06:11:57 $
+"      Version: $Revision: 1.22 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -68,6 +68,7 @@
 " Please send me any bugs you find, so I can keep the script up to date.
 "------------------------------------------------------------------------------
 "
+"" GetLatestVimScripts: 563 1 rcsvers.vim
 " Additional Information: {{{1
 "------------------------------------------------------------------------------
 " Vim plugin for automatically saving backup versions in rcs whenever a file
@@ -86,8 +87,12 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
-" 1.21  Remember the last position in the rlog window. Rename RevisionLog
-"       window to avoid collisions
+" 1.22  some re-factoring, and add the option to leave RCS files unlocked when
+"       saving, which is handy for multiple users of the same RCS file.  
+"       See g:rvLeaveRcsUnlocked. (from Roger Pilkey)
+"
+" 1.21  Remember the last position in the rlog window. Rename 
+"       RevisionLog window to avoid collisions. (from Roger Pilkey)
 "
 " 1.20  Added a mapping to create an initial RCS file. Useful when the script
 "       is set to save only when a previous RCS file exists. see
@@ -136,7 +141,7 @@
 "
 " 1.10  Fixed some major bugs with files with long filenames and spaces
 "       Win/Dos systems. Added a variable to pass additional options to the
-"       initial RCS check in. Fixed some documentations typos.
+"       initial RCS check in. Fixed some documentation typos.
 "
 " 1.9   Added even more options, the ability to set your own description and
 "       pass additional options to CI command. Dos/Win Temp directory is taken
@@ -312,6 +317,28 @@
 "           " show the log using the local timezone
 "           let g:rvRlogOptions = '-zLT'
 "
+" g:rvLeaveRcsUnlocked
+"       This will leave the RCS file unlocked when saving, so that more than one 
+"       user can use the same RCS backup file. By default, this is off, because 
+"       it adds two more system commands on every save, which is slower, and you
+"       probably want to protect your backups from modification by other users
+"       by default, and you shouldn't be using this script for more than personal 
+"       backups anyway, kids.  This is useful though, if for example you want 
+"       to use rcsvers.vim in a global settings file to track file changes.  
+"       Warning: once you turn this option on and save a file, you will lose 
+"       your lock on the RCS file.  So if you turn it off later, rcsvers.vim 
+"       won't be able to save any more versions until you get a lock again.
+"       e.g.
+"          "unlock RCS backup files when done
+"          let g:rvLeaveRcsUnlocked = 1
+"
+" g:rvShowUser
+"       Show the user in the rlog window, handy if more than one user is using
+"       the same RCS backup file. off by default
+"       e.g.
+"          "show user in RCS log window
+"          let g:rvShowUser = 1
+"
 " g:rvDescription
 "       This allows you to set your initial description and version
 "       message. The default value is 'vim'. To override use:
@@ -389,6 +416,18 @@ if !exists('g:rvRlogOptions')
     let g:rvRlogOptions = ""
 endif
 
+" leave RCS file unlocked
+"------------------------------------------------------------------------------
+if !exists('g:rvLeaveRcsUnlocked')
+    let g:rvLeaveRcsUnlocked = 0
+endif
+
+" show User in rlog
+"------------------------------------------------------------------------------
+if !exists('g:rvShowUser')
+    let g:rvShowUser = 0
+endif
+
 " Set initial description and version message
 "------------------------------------------------------------------------------
 if !exists('g:rvDescription')
@@ -442,7 +481,7 @@ if !exists('g:rvTempDir')
     endif
 endif
 
-" Skip vim's rcs file name
+" Set the skip vimrcs file name
 "------------------------------------------------------------------------------
 if !exists('g:rvSkipVimRcsFileName')
     if has("win32") || has("win16") || has("dos32")
@@ -539,6 +578,25 @@ function! s:bufunload()
         let @"=s:save_unnamed_reg
         unlet! s:child_bufnr s:parent_bufnr s:revision
     endif
+endfunction
+
+" Function: run a system command, print errors {{{1
+"------------------------------------------------------------------------------
+function! s:RunCmd(cmd)
+        let l:output = system(a:cmd)
+        if ( v:shell_error != 0 )
+            echo "(rcsvers.vim) *** Error executing command."
+            echo "Command was:"
+            echo "--- begin ---"
+            echo a:cmd
+            echo "--- end ---"
+            echo "Output:"
+            echo "--- begin ---"
+            echo l:output
+            echo "--- end ---"
+            return "error"
+        endif
+        return l:output
 endfunction
 
 " Function: save settings that get mangled {{{1
@@ -650,11 +708,8 @@ function! s:rcsvers(type)
 
     " Create RCS dir if it doesn't exist
     if (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
-        let l:returnval = system("mkdir ".g:rvFileQuote.l:SaveDirectoryName.g:rvFileQuote)
-        if ( l:returnval != "" )
-            let l:err = "(rcsvers.vim) Error creating rcs directory: ".l:SaveDirectoryName
-            let l:err = l:err."\nThe error was: ".l:returnval
-            echo l:err
+        let l:returnval = s:RunCmd("mkdir ".g:rvFileQuote.l:SaveDirectoryName.g:rvFileQuote)
+        if ( l:returnval == "error" )
             return
         endif
     endif
@@ -703,30 +758,24 @@ function! s:rcsvers(type)
     " -t-       File description at initial check in.
     " -x        Suffix to use for rcs files.
     " -m        Log message
+    "
+    " Build the command options	manually, s:GetCommonCmdOpts() isn't quite
+	" right
+
+    if (g:rvSaveSuffixType != 0)
+        let l:cmdopts = " -x".l:suffix
+    endif
+
+    let l:cmdopts = l:cmdopts." ".g:rvFileQuote.bufname("%").g:rvFileQuote
+
+    if (g:rvSaveSuffixType != 0)
+        let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+    endif
 
     if (getfsize(l:rcsfile) == -1)
         " Initial check-in, create an empty RCS file
-        let l:cmd = "rcs -i -t-\"".l:description."\" ".g:rvRcsOptions
-
-        if (g:rvSaveSuffixType != 0)
-            let l:cmd = l:cmd." -x".l:suffix
-        endif
-
-        let l:cmd = l:cmd." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
-        let l:output = system(l:cmd)
-        if ( v:shell_error == -1 )
-            echo "(rcsvers.vim) Command could not be executed."
-        elseif ( v:shell_error != 0 )
-            echo "(rcsvers.vim) *** Error executing command."
-            echo "Command was:"
-            echo "--- beg --"
-            echo l:cmd
-            echo "--- end --"
-            echo "Output:"
-            echo "--- beg --"
-            echo l:output
-            echo "--- end --"
-        endif
+        let l:cmd = "rcs -i -t-\"".l:description."\" ".g:rvRcsOptions.l:cmdopts
+        call s:RunCmd(l:cmd)
     else
         " We only need to do a pre-save if the RCS file
         " does not exist.
@@ -735,32 +784,22 @@ function! s:rcsvers(type)
         endif
     endif
 
-    let l:cmd = "ci -l -m\"".l:message."\" ".g:rvCiOptions
-
-    if (g:rvSaveSuffixType != 0)
-        let l:cmd = l:cmd." -x".l:suffix
+    "lock RCS file if the option is set
+    if (g:rvLeaveRcsUnlocked != 0)
+        "-l locks the RCS file
+        let l:cmd = "rcs -l ".g:rvRcsOptions.l:cmdopts
+        call s:RunCmd(l:cmd)
     endif
 
-    " Build the command string <command> <filename> <rcs file>
-    let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote
+    "do the checkin
+    let l:cmd = "ci -l -m\"".l:message."\" ".g:rvCiOptions.l:cmdopts
+    call s:RunCmd(l:cmd)
 
-    if (g:rvSaveSuffixType != 0)
-        let l:cmd = l:cmd." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
-    endif
-
-    let l:output = system(l:cmd)
-    if ( v:shell_error == -1 )
-        echo "(rcsvers.vim) Command could not be executed."
-    elseif ( v:shell_error != 0 )
-        echo "(rcsvers.vim) *** Error executing command."
-        echo "Command was:"
-        echo "--- beg --"
-        echo l:cmd
-        echo "--- end --"
-        echo "Output:"
-        echo "--- beg --"
-        echo l:output
-        echo "--- end --"
+    "leave RCS file unlocked if the option is set
+    if (g:rvLeaveRcsUnlocked != 0)
+        "-u breaks the lock on the RCS file
+        let l:cmd = "rcs -u ".g:rvRcsOptions.l:cmdopts
+        call s:RunCmd(l:cmd)
     endif
 
 endfunction
@@ -780,42 +819,33 @@ function! s:DisplayLog()
     "if the log or a version diff is already displayed, delete it and quit
     "(so that this function will work as a toggle)
     if (exists("s:child_bufnr"))
-		if (match(bufname(s:child_bufnr),"rcsversRevisionLog")!=-1)
+        if (match(bufname(s:child_bufnr),"rcsversRevisionLog")!=-1)
             "get the revision from the rlog window
             exec bufwinnr(s:child_bufnr) . "wincmd w"
             let l:rvlastlogpos = substitute(getline("."),
                 \"^\\([.0-9]\\+\\).\\+", "\\1", "g")
-		else
-			"get the revision from the buffer-variable in the parent 
+        else
+            "get the revision from the buffer-variable in the parent 
             sil! exec bufwinnr(s:parent_bufnr) . "wincmd w"
-			let l:rvlastlogpos = b:rvlastlogpos
-		endif
+            let l:rvlastlogpos = b:rvlastlogpos
+        endif
         silent exec "bd! " . s:child_bufnr
         "remember the current position in the rlog window for each buffer
         let b:rvlastlogpos = l:rvlastlogpos
         return
     endif
-    let l:suffix = s:CreateSuffix()
 
     "save the current directory, in case they automatically change dir when opening files
     let l:savedir = expand("%:p:h")
 
-    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
-
-    " Check for an RCS file
-    if (getfsize(l:rcsfile) == -1)
-        echo "(rcsvers.vim) Error: No RCS file found! (".l:rcsfile.")"
+    " Create the command
+    let l:cmdopts = s:GetCommonCmdOpts()
+    if (l:cmdopts == "error")
         return
     endif
 
     " Create the command
-    let l:cmd = "rlog ".g:rvRlogOptions
-
-    if (g:rvSaveSuffixType != 0)
-        let l:cmd = l:cmd." -x".l:suffix
-    endif
-    let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." "
-    let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
+    let l:cmd = "rlog ".g:rvRlogOptions.l:cmdopts
 
     " This is the name of the buffer that holds the revision log list.
     let l:bufferName = g:rvTempDir.g:rvDirSeparator."rcsversRevisionLog"
@@ -862,16 +892,27 @@ function! s:DisplayLog()
             let l:curr_line = l:curr_line + 2
         endwhile
 
-        " and format as: 'revision: date time'
-        sil! exe ":%s/revision\\s\\+\\([0-9.]\\+\\).\*".
-                    \"date\\(:[^;]\\+\\)[^~]\\+./\\1\\2/g"
+        if (g:rvShowUser !=0)
+            " format as: 'revision: date time author'
+            sil! exe ":%s/revision\\s\\+\\([0-9.]\\+\\).\*".
+                    \"date:\\([^;]\\+\\).\*".
+                    \"author:\\([^;]\\+\\)".
+                    \"[^~]\\+./".
+                    \"\\1:\\2\\3/g"
+        else
+            " format as: 'revision: date time '
+            sil! exe ":%s/revision\\s\\+\\([0-9.]\\+\\).\*".
+                    \"date:\\([^;]\\+\\)".
+                    \"[^~]\\+./".
+                    \"\\1:\\2/g"
+        endif
 
         " Remove default "vim" descriptions or rvDescription
         sil! exe ":%s/\\s".g:rvDescription."$//g"
 
         " Go to the remembered position in the rlog window.
         sil! exe "normal 1G"
-		sil! exe "/^".l:rvlastlogpos.":"
+        sil! exe "/^".l:rvlastlogpos.":"
 
     endif
 
@@ -910,27 +951,23 @@ function! s:NextCompareFiles(direction)
     endif
 
     if (!exists("s:revision"))
-        "no revision available, get the number of the head
-        " Create the command
-        let l:cmd = "rlog -r. ".g:rvRlogOptions
+       "no revision available, get the number of the head
+       " Create the command
+       let l:cmdopts = s:GetCommonCmdOpts()
+       if (l:cmdopts == "error")
+           return
+       endif
+       let l:cmd = "rlog -r. ".g:rvRlogOptions.l:cmdopts
 
-        let l:suffix = s:CreateSuffix()
+       " Execute the command.
+       let s:revision = s:RunCmd(l:cmd)
 
-        let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
-
-        if (g:rvSaveSuffixType != 0)
-            let l:cmd = l:cmd." -x".l:suffix
-        endif
-        let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." "
-        let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
-
-        " Execute the command.
-        let s:revision = system(l:cmd)
-
-        "get the 'head:' line
-        let s:revision = matchstr(s:revision,'head.\{-}\n')
-        "get rid of the 'head:'
-        let s:revision = substitute(s:revision,'^head: ',"","")
+       "get the 'head:' line
+       let s:revision = matchstr(s:revision,'head.\{-}\n')
+       "get rid of the 'head:'
+       let s:revision = substitute(s:revision,'^head: ',"","")
+       "get rid of nl
+       let s:revision = substitute(s:revision,'\n',"","")
     endif
 
     "if the version is x.y , the head is x. and the tail is y
@@ -957,30 +994,21 @@ endfunction
 "------------------------------------------------------------------------------
 function! s:CompareFiles(revision)
 
-    let l:suffix = s:CreateSuffix()
-
     "save the current directory, in case they automatically change dir when opening files
     let l:savedir = expand("%:p:h")
-
-    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
     " Build the co command
     "
     " co options are as follows:
-    " -q        Keep co quiet ( no messages )
     " -p        Print the revision rather than storing in a file.
     "             This allows us to capture it with the r! command.
     " -r        Revision number to check out.
-    " -x        Suffix to use for rcs files.
 
-    let l:cmd = "co -q -p -r".a:revision
-
-    if (g:rvSaveSuffixType != 0)
-        let l:cmd = l:cmd." -x".l:suffix
+    let l:cmdopts = s:GetCommonCmdOpts()
+    if (l:cmdopts == "error")
+        return
     endif
-
-    let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." ".
-                \g:rvFileQuote.l:rcsfile.g:rvFileQuote
+    let l:cmd = "co -p -r".a:revision.l:cmdopts
 
     " Create a new buffer to place the co output
     let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t").".".a:revision
@@ -1032,7 +1060,7 @@ function! s:CompareFiles(revision)
         let s:parent_bufnr = l:parent_bufnr
         let s:child_bufnr = l:child_bufnr
         let s:revision = a:revision
-		
+
         "remember the current position in the rlog window for each buffer
         let b:rvlastlogpos = s:revision
 
@@ -1040,6 +1068,37 @@ function! s:CompareFiles(revision)
 
 endfunction
 "}}}
+" Function: set up the common commandline options {{{1
+function! s:GetCommonCmdOpts()
+    " Build the command options
+    let l:suffix = s:CreateSuffix()
+
+    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+
+    " Check for an RCS file
+    if (getfsize(l:rcsfile) == -1)
+        echo "(rcsvers.vim) Error: No RCS file found! (".l:rcsfile.")"
+        return "error"
+    endif
+
+    " -x   Suffix to use for rcs files.
+    if (g:rvSaveSuffixType != 0)
+        let l:cmdopts = " -x".l:suffix
+    endif
+
+    let l:cmdopts = l:cmdopts." ".g:rvFileQuote.bufname("%").g:rvFileQuote
+
+    if (g:rvSaveSuffixType != 0)
+        let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+    endif
+
+    " -q   Keep quiet ( no messages )
+    let l:cmdopts = " -q ".l:cmdopts
+
+    return l:cmdopts
+
+endfunction
+"}}}1
 
 " Default key mappings to generate a revision log, and diff with adjacent
 " versions.
