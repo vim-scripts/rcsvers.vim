@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (frias.junk at earthlink.net)
 "
-"  Last Change: $Date: 2003/05/22 13:16:05 $
-"      Version: $Revision: 1.14 $
+"  Last Change: $Date: 2003/09/15 15:17:05 $
+"      Version: $Revision: 1.15 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -29,8 +29,8 @@
 "               The author and maintainer do not retain any liability on any
 "               damage caused through the use of this script.
 "
-"      Install: 1. Read the section titled 'Options'
-"               2. Setup any variables need in your vimrc file
+"      Install: 1. Read the section titled 'User Options'
+"               2. Setup any variables you need in your vimrc file
 "               3. Copy 'rcsvers.vim' to your plugin directory.
 "
 "  Mapped Keys: <Leader>rlog    To access saved revisions log.  This works as
@@ -40,23 +40,31 @@
 "                               revision under the cursor (works only in
 "                               the revision log window)
 "
+"               <Leader>older   does a diff with the previous version
+"
+"               <Leader>newer   does a diff with the next version
+"
+" You probably want to map these to something easier to type, like a function
+" key
+"
 "------------------------------------------------------------------------------
 " Please send me any bugs you find, so I can keep the script up to date.
 "------------------------------------------------------------------------------
 "
 " Additional Information: {{{1
 "------------------------------------------------------------------------------
-" Vim plugin for automatically saving backup versions in rcs
-" whenever a file is saved.
+" Vim plugin for automatically saving backup versions in rcs whenever a file
+" is saved.
 "
-" What's RCS? See <a href='http://www.gnu.org/software/rcs/rcs.html'>http://www.gnu.org/software/rcs/rcs.html</a>
+" What's RCS? See http://www.gnu.org/software/rcs/rcs.html
 "
-" Be careful if you really use RCS as your production file control, it
-" will add versions like crazy. See options bellow for work around.
+" Be careful if you really use RCS as your production file control, it will
+" add versions like crazy. See options below for work arounds.
 "
 " If you're using Microsoft Windows, then the rcs programs are available by
-" installing WinCVS (<a href='http://www.wincvs.org/'>http://www.wincvs.org/</a>), 
-" and putting the wincvs directory in your path.
+" installing WinCVS (http://www.wincvs.org), and putting the wincvs directory
+" in your path. (WinCVS 1.2 or earlier only, they took out the programs as of
+" 1.3)
 "
 " rcs-menu.vim by Jeff Lanzarotta is handy to have along with this
 " (vimscript #41).
@@ -64,14 +72,18 @@
 " History: {{{1
 "------------------------------------------------------------------------------
 "
-" 1.14  Add option to set "rlog" command-line options.  fix rlog display,
+" 1.15  Add functions to go back and forth between versions (mapped to \older
+"       and \newer). It's kind of jerky, but comes in handy sometimes. Also
+"       fixed a few bugs with quotes.
+"
+" 1.14  Add option to set 'rlog' command-line options.  fix rlog display,
 "       which would crash once in a while saying stuff like "10,10d invalid
 "       range". When creating a new RCS file on an existing text file, save a
 "       version before adding the new revision.
 "
 " 1.13  A g:rvFileQuote fix, suggested by Wiktor Niesiobedzki.  Add the
 "       ability to use the current instance of vim for the diff, which is now
-"       the default.  Change the name of the diff temp file to include the 
+"       the default.  Change the name of the diff temp file to include the
 "       version.  Make \rlog a toggle (on/off)
 "
 " 1.12  Script will not load if the 'cp' flag is set. Added the option to
@@ -117,32 +129,41 @@
 "
 " <Leader>rlog
 "       This is the default key map to display the revision log. search
-"       for 'key' to overwrite this key.
+"       for 'key' to override this key.
+"
+" <Leader>older
+"       This is the default key map to display the previous revision. search
+"       for 'key' to override this key.
+"
+" <Leader>newer
+"       This is the default key map to display the next revision. search
+"       for 'key' to override this key.
 "
 " g:rvCompareProgram
 "       This is the program that will be called to compare two files,
 "       the temporary file created by the revision log and the current
 "       file. The default program is vimdiff in the current instance of vim.
-"       To overwrite use:
+"       To override use:
 "           let g:rvCompareProgram = <your compare program>
 "       in your vimrc file. Win32 users you may want to use:
 "           let g:rvCompareProgram = start <your program>
 "       for an asynchronous run, type :help :!start for details.
 "       example:
-"           let g:rvCompareProgram = "start\ C:\\Vim\\vim61\\gvim.exe\ -d\ -R\ --noplugin\ "
+"           let g:rvCompareProgram = 'start\ C:\\Vim\\vim61\\gvim.exe\ -d\ -R\ --noplugin\ '
 "
-"       To open the diff within the current instance of vim, use "This"
+"       To open the diff within the current instance of vim, use 'This'
+"       (default)
 "
 " g:rvFileQuote
 "       This is the character used to enclose filenames when calling the
-"       compare program. By default in DOS/Win Systems is '"' (quote) in
-"       all other system it's blank. To overwrite this use:
+"       compare program. By default it is '"' (double-quote).
+"       To override this use:
 "           let g:rvFileQuote = <quote char>
 "       in your vimrc file.
 "
 " g:rvDirSeparator
 "       Separator to use between paths, the script will try to auto detect
-"       this but to overwrite use:
+"       this but to override use:
 "           let g:rvDirSeparator = <separator>
 "       in your vimrc file.
 "
@@ -151,7 +172,7 @@
 "       compare it to the current file. The default is $temp for Dos/win
 "       systems and <g:rvDirSeparator>temp for all other systems. The
 "       script will automatically append the directory separator to the
-"       end, so do not include this. To overwrite defaults use:
+"       end, so do not include this. To override defaults use:
 "           let g:rvTempDir = <your directory>
 "       in your vimrc file.
 "
@@ -159,14 +180,14 @@
 "       This is the name of the file the script will look for, if its found
 "       in the directory the file is being edited the RCS file will not
 "       be written. By default the name is _novimrcs for Dos/win systems
-"       and .novimrcs for all other. to overwrite use:
+"       and .novimrcs for all other. To override use:
 "           let  g:rvSkipVimRcsFileName = <filename>
 "       in your vimrc file.
 "
 " g:rvSaveDirectoryType
 "       This specifies how the script will save the RCS files. By default
 "       they will be saved under the current directory (under RCS). To
-"       overwrite use:
+"       override use:
 "           let g:rvSaveDirectoryType = 1
 "       in your vimrc file, options are as follows:
 "           0 = Save in current directory (under RCS)
@@ -181,7 +202,7 @@
 "       be saved. By default if g:rvSaveDirectoryType = 0 (saving to
 "       the current directory) the script will use RCS. If
 "       g:rvSaveDirectoryType = 1 (saving all files in a single
-"       directory) the script will save them to $VIM/RCSFiles to overwrite
+"       directory) the script will save them to $VIM/RCSFiles. To override
 "       the default name use:
 "           let g:rvSaveDirectoryName = <my directory name>
 "       in your vimrc file.
@@ -191,23 +212,23 @@
 "       RCS files. The default is ',v' suffix when using rvSaveDirectoryType
 "       number 0 (current directory under RCS), and unique suffix when using
 "       rvSaveDirectoryType number 1. (single directory for all files). To
-"       overwrite the defaults use:
+"       override the defaults use:
 "           let g:rvSaveSuffixType = x
 "       where 'x' is one of the following
 "           0 = No suffix.
-"           1 = Use the ',v" suffix
+"           1 = Use the ',v' suffix
 "           2 = Use a unique suffix (take the full path and changes the
 "               directory separators to underscores)
 "           3 = use a unique suffix with a ',v' Appended to the end.
 "           4 = User defined suffix.
-"       If you select type number 4 the default is ',v' to overwrite Use:
+"       If you select type number 4 the default is ',v'. To override use:
 "           let g:rvSaveSuffix = 'xxx'
 "       where 'xxx' is your user defined suffix.
 "
 " g:rvCiOptions
 "       This specifies additional options to send to CI (check in program)
 "       by default this is blank. Refer to RCS documentation for additional
-"       options to pass. To overwrite use:
+"       options to pass. To override use:
 "           let g:rvCiOptions = <options>
 "       in your vimrc file.
 "
@@ -215,25 +236,25 @@
 "       This specifies additional options to send to RCS (program that
 "       creates the initial RCS file) by default this is set to '-ko' to
 "       prevent $xx$ tags from being altered. Refer to RCS documentation
-"       for additional options to pass. To overwrite use:
+"       for additional options to pass. To override use:
 "           let g:rvRcsOptions = <options>
 "       in your vimrc file.
-" 
+"
 " g:rvRlogOptions
 "       This specifies additional options to send to rlog (history displaying
-"       program). By default this is set to '' to avoid surprising you. 
-"       Refer to RCS documentation for additional options to pass. 
+"       program). By default this is set to '' to avoid surprising you.
+"       Refer to RCS documentation for additional options to pass.
 "       To override use:
 "           let g:rvRlogOptions = <options>
 "       in your vimrc file.
-"       e.g. 
-"       	" show the log using the local timezone
-"           let g:rvRlogOptions = "-zLT"
+"       e.g.
+"           " show the log using the local timezone
+"           let g:rvRlogOptions = '-zLT'
 "
 "
 " g:rvDescription
 "       This allows you to set your initial description and version
-"       message. The default value is 'vim'. To overwrite use:
+"       message. The default value is 'vim'. To override use:
 "           let g:rvDescription = <description>
 "       in your vimrc file.
 "
@@ -242,7 +263,7 @@
 "       tests the expression against the full file name and path of the file
 "       being saved. If the expression is found in the file name then the
 "       script will NOT create an RCS file for it. The default is an empty
-"       string, in which case no checking is done. To overwrite use:
+"       string, in which case no checking is done. To override use:
 "           let g:rvExcludeExpression = <your expression>
 "       in your vimrc file.
 "
@@ -260,8 +281,8 @@
 "
 " g:rvIncludeExpression
 "       This expression is evaluated with the function 'match'. The script
-"       test the expression against the full file name and path of the file
-"       begin saved. If the expression is found in the file name, then the
+"       tests the expression against the full file name and path of the file
+"       being saved. If the expression is found in the file name, then the
 "       script will create an RCS file for it, but if it's not found it will
 "       NOT. The default is an empty string, in which case no checking is done
 "       and all files will generate an RCS file except if an exclude
@@ -278,7 +299,6 @@ if exists("loaded_rcsvers") || &cp
     finish
 endif
 let loaded_rcsvers = 1
-
 
 " Set additional RCS options
 "------------------------------------------------------------------------------
@@ -297,7 +317,6 @@ endif
 if !exists('g:rvRlogOptions')
     let g:rvRlogOptions = ""
 endif
-
 
 " Set initial description and version message.
 "------------------------------------------------------------------------------
@@ -343,7 +362,6 @@ if !exists('g:rvTempDir')
     endif
 endif
 
-
 " Skip vim's rcs file name
 "------------------------------------------------------------------------------
 if !exists('g:rvSkipVimRcsFileName')
@@ -355,35 +373,11 @@ if !exists('g:rvSkipVimRcsFileName')
     endif
 endif
 
-
 " Set where the files are saved
 "------------------------------------------------------------------------------
 if !exists('g:rvSaveDirectoryType')
     let g:rvSaveDirectoryType = 0
 endif
-
-
-" Set the name of the directory to save RCS files to
-"------------------------------------------------------------------------------
-"
-function! s:GetSaveDirectoryName()
-
-    if !exists('g:rvSaveDirectoryName')
-        if g:rvSaveDirectoryType == 0
-            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
-
-        elseif g:rvSaveDirectoryType == 1
-            let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
-
-        else " Type 2
-            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
-        endif
-    else
-        return g:rvSaveDirectoryName
-    endif
-
-    return l:SaveDirectoryName
-endfunction
 
 " Set the suffix type
 "------------------------------------------------------------------------------
@@ -413,7 +407,7 @@ if !exists('g:rvIncludeExpression')
     let g:rvIncludeExpression = ""
 endif
 
-" Hook Save RCS function to events
+" Hook the RCS function to the Save events {{{1
 "------------------------------------------------------------------------------
 augroup rcsvers
    au!
@@ -428,6 +422,8 @@ augroup rcsvers
    au BufUnload * call s:bufunload()
 augroup END
 
+" Function: Autocommand for buffer unload to clean up after ourselves {{{1
+"------------------------------------------------------------------------------
 function! s:bufunload()
     "turn off the diff settings in the original file when you kill the child
     "buffer
@@ -435,28 +431,54 @@ function! s:bufunload()
         sil! exec bufwinnr(s:parent_bufnr) . " wincmd w"
         set nodiff
         set foldcolumn=0
-        unlet! s:child_bufnr s:parent_bufnr
+        unlet! s:child_bufnr s:parent_bufnr s:revision
     endif
 endfunction
 
-" Generate suffix
+" Function: Set the name of the directory to save RCS files to {{{1
+"------------------------------------------------------------------------------
+function! s:GetSaveDirectoryName()
+
+    if !exists('g:rvSaveDirectoryName')
+        if g:rvSaveDirectoryType == 0
+            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
+
+        elseif g:rvSaveDirectoryType == 1
+            let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
+
+        else " Type 2
+            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
+        endif
+    else
+        return g:rvSaveDirectoryName
+    endif
+
+    return l:SaveDirectoryName
+endfunction
+
+" Function: Generate suffix {{{1
 "------------------------------------------------------------------------------
 function! s:CreateSuffix()
     if g:rvSaveSuffixType == 0
         return ""
 
     elseif g:rvSaveSuffixType == 1
+        "1 = Use the ',v" suffix
         return ",v"
 
     elseif g:rvSaveSuffixType == 2
+        "2 = Use a unique suffix
         return ",".expand("%:p:h:gs?\[:/ \\\\]?_?")
 
     elseif g:rvSaveSuffixType == 3
+        "3 = use a unique suffix with a ',v' Appended to the end.
         return ",".expand("%:p:h:gs?\[:/ \\\\]?_?").",v"
 
-    else " type 4 User defined
+    elseif g:rvSaveSuffixType == 4
+		"4 = User defined
         return g:rvSaveSuffix
-
+	else
+        echo "(rcsvers.vim) Error: unknown suffix type: ".g:rvSaveSuffixType
     endif
 endfunction
 
@@ -495,7 +517,7 @@ function! s:rcsvers(type)
     if (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
         let l:returnval = system("mkdir ".g:rvFileQuote.l:SaveDirectoryName.g:rvFileQuote)
         if ( l:returnval != "" )
-            let l:err = "Error creating rcs directory: ".l:SaveDirectoryName
+            let l:err = "(rcsvers.vim) Error creating rcs directory: ".l:SaveDirectoryName
             let l:err = l:err."\nThe error was: ".l:returnval
             echo l:err
             return
@@ -523,9 +545,9 @@ function! s:rcsvers(type)
         let l:cmd = l:cmd." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
         let l:output = system(l:cmd)
         if ( v:shell_error == -1 )
-            echo "Command could not be executed."
+            echo "(rcsvers.vim) Command could not be executed."
         elseif ( v:shell_error != 0 )
-            echo "*** Error executing command."
+            echo "(rcsvers.vim) *** Error executing command."
             echo "Command was:"
             echo "--- beg --"
             echo l:cmd
@@ -549,7 +571,7 @@ function! s:rcsvers(type)
         let l:cmd = l:cmd." -x".l:suffix
     endif
 
-    " Build command string <command> <filename> <rcs file>
+    " Build the command string <command> <filename> <rcs file>
     let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote
 
     if (g:rvSaveSuffixType != 0)
@@ -558,9 +580,9 @@ function! s:rcsvers(type)
 
     let l:output = system(l:cmd)
     if ( v:shell_error == -1 )
-        echo "Command could not be executed."
+        echo "(rcsvers.vim) Command could not be executed."
     elseif ( v:shell_error != 0 )
-        echo "*** Error executing command."
+        echo "(rcsvers.vim) *** Error executing command."
         echo "Command was:"
         echo "--- beg --"
         echo l:cmd
@@ -572,7 +594,6 @@ function! s:rcsvers(type)
     endif
 
 endfunction
-
 
 " Function: Display the revision log {{{1
 "------------------------------------------------------------------------------
@@ -592,7 +613,7 @@ function! s:DisplayLog()
 
     " Check for an RCS file
     if (getfsize(l:rcsfile) == -1)
-        echo "Error: No RCS file found! (".l:rcsfile.")"
+        echo "(rcsvers.vim) Error: No RCS file found! (".l:rcsfile.")"
         return
     endif
 
@@ -619,11 +640,11 @@ function! s:DisplayLog()
     let s:child_bufnr =  bufnr("%")
 
     " Map <enter> to compare current file to that version
-    nnoremap <buffer> <CR> :call <SID>CompareFiles()<CR>
+    nnoremap <buffer> <CR> :call <SID>RlogCompareFiles()<CR>
 
     "change dir to the original file dir, in case they auto change dir
     "when opening files
-    sil exec "cd " . l:savedir
+    sil exec "cd ".g:rvFileQuote. l:savedir.g:rvFileQuote
 
     " Execute the command.
     sil exe 'r!' l:cmd
@@ -637,7 +658,7 @@ function! s:DisplayLog()
         " Remove any line not matching 'date' or 'revision'
         sil exe ":g!/^revision\\|^date/d"
         sil exe "normal 1G"
-"       Format date and revision into a single line.
+        " Format date and revision into a single line.
         let l:lines = line("$")
         let l:curr_line = 0
 
@@ -664,10 +685,9 @@ function! s:DisplayLog()
 
 endfunction
 
-
-" Function: Compare the current file to the selected revision {{{1
+" Function: Compare the current file to the selected revision from rlog {{{1
 "------------------------------------------------------------------------------
-function! s:CompareFiles()
+function! s:RlogCompareFiles()
 
     " Get just the revision number
     let l:revision = substitute(getline("."),
@@ -676,6 +696,67 @@ function! s:CompareFiles()
     " Close the revision log, This will send us back to the original file.
     silent exe "bd!"
 
+    call s:CompareFiles(l:revision)
+
+endfunction
+
+" Function: Compare the current file to the next revision ("older" or "newer") {{{1
+"------------------------------------------------------------------------------
+function! s:NextCompareFiles(direction)
+
+    "start off in the parent window
+    if (exists("s:parent_bufnr"))
+        sil exec bufwinnr(s:parent_bufnr) . "wincmd w"
+    endif
+
+    if (!exists("s:revision"))
+        "no revision available, get the number of the head
+        " Create the command
+        let l:cmd = "rlog -r. ".g:rvRlogOptions
+
+        let l:suffix = s:CreateSuffix()
+
+        let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+
+        if (g:rvSaveSuffixType != 0)
+            let l:cmd = l:cmd." -x".l:suffix
+        endif
+        let l:cmd = l:cmd." ".g:rvFileQuote.bufname("%").g:rvFileQuote." "
+        let l:cmd = l:cmd.g:rvFileQuote.l:rcsfile.g:rvFileQuote
+
+        " Execute the command.
+        let s:revision = system(l:cmd)
+
+        "get the 'head:' line
+        let s:revision = matchstr(s:revision,'head.\{-}\n')
+        "get rid of the 'head:'
+        let s:revision = substitute(s:revision,'^head: ',"","")
+    endif
+
+    "if the version is x.y , the head is x. and the tail is y
+    let l:head = matchstr(s:revision,'^.*\.')
+    let l:tail = matchstr(s:revision,'\d*.$')
+
+    "add or subtract from the tail to get the desired revision
+    if (a:direction == "older")
+        let l:tail = l:tail - 1
+    elseif (a:direction == "newer")
+        let l:tail = l:tail + 1
+    else
+        echo "(rcsvers.vim) Error: Bad arg to s:NextCompareFiles() : a:direction"
+    endif
+
+    "put together the whole revision
+    let s:revision = l:head . l:tail
+
+    call s:CompareFiles(s:revision)
+
+endfunction
+
+" Function: Compare the current file to a revision {{{1
+"------------------------------------------------------------------------------
+function! s:CompareFiles(revision)
+
     let l:suffix = s:CreateSuffix()
 
     "save the current directory, in case they automatically change dir when opening files
@@ -683,7 +764,7 @@ function! s:CompareFiles()
 
     let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
 
-    " Build command
+    " Build the co command
     "
     " co options are as follows:
     " -q        Keep co quiet ( no messages )
@@ -692,7 +773,7 @@ function! s:CompareFiles()
     " -r        Revision number to check out.
     " -x        Suffix to use for rcs files.
 
-    let l:cmd = "co -q -p -r".l:revision
+    let l:cmd = "co -q -p -r".a:revision
 
     if (g:rvSaveSuffixType != 0)
         let l:cmd = l:cmd." -x".l:suffix
@@ -702,24 +783,31 @@ function! s:CompareFiles()
                 \g:rvFileQuote.l:rcsfile.g:rvFileQuote
 
     " Create a new buffer to place the co output
-    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t").".".l:revision
+    let l:tmpfile = g:rvTempDir.g:rvDirSeparator."_".expand("%:p:t").".".a:revision
+
     "save the buffer number of the original file
-    let s:parent_bufnr = bufnr("%")
+    let l:parent_bufnr = bufnr("%")
+
+    " ditch any existing child buffer
+    if (exists("s:child_bufnr"))
+        sil exec bufwinnr(s:child_bufnr) . "wincmd w"
+        sil exe "bd!"
+    endif
 
     "create a new buffer
     sil exe "vnew ".l:tmpfile
 
     "save the buffer number of the revision file
-    let s:child_bufnr = bufnr("%")
+    let l:child_bufnr = bufnr("%")
 
     " Delete the contents if it's not empty
     sil exe "1,$d"
 
     "change dir to the original file dir, in case they auto change dir
     "when opening files
-    exec "cd " . l:savedir
+    exec "cd ".g:rvFileQuote.l:savedir.g:rvFileQuote
 
-    " Run the command and capture the output
+    " Run the co command and capture the output
     sil exe "sil! 0r!".l:cmd
     setlocal noswapfile
     setlocal nomodified
@@ -735,17 +823,27 @@ function! s:CompareFiles()
     else
     " or do a diff in the current instance of vim
         diffthis
-        sil exec bufwinnr(s:parent_bufnr) . "wincmd w"
+        sil exec bufwinnr(l:parent_bufnr) . "wincmd w"
         diffthis
+
+        "set session variables in the parent buffer which indicate parent buffer
+        "number, child buffer number, and the revision that is
+        "currently showing
+        let s:parent_bufnr = l:parent_bufnr
+        let s:child_bufnr = l:child_bufnr
+        let s:revision = a:revision
     endif
 
 endfunction
+"}}}
 
-"}}}1
-
-" Default key mapping to generate revision log.
+" Default key mappings to generate revision log.
+" You probably want to map these to something easier to type, like a function
+" key
 "------------------------------------------------------------------------------
 nnoremap <Leader>rlog :call <SID>DisplayLog()<cr>
 
-" vim600: tw=78 : set foldmethod=marker :
+nnoremap <Leader>older :call <SID>NextCompareFiles("older")<cr>
+nnoremap <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
+" vim600:tw=78:set fdm=marker:
