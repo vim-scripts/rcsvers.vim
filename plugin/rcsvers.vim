@@ -1,9 +1,9 @@
 " rcsvers.vim
 " Maintainer: Roger Pilkey (rpilkey at magma.ca)
 " $Author: rpilkey $
-" $Date: 2003/02/19 14:46:19 $
-" $Revision: 1.27 $
-" $Id: rcsvers.vim,C__Vim_vimfiles_plugin 1.27 2003/02/19 14:46:19 rpilkey Exp rpilkey $
+" $Date: 2003/02/19 14:50:43 $
+" $Revision: 1.3 $
+" $Id: rcsvers.vim,v 1.3 2003/02/19 14:50:43 rpilkey Exp $
 "
 "
 " Vim plugin for automatically saving backup versions in rcs
@@ -18,12 +18,12 @@
 " installing WinCVS (http://www.wincvs.org/), and putting the wincvs directory
 " in your path.
 "
-" rcs-menu.vim by Jeff Lanzarotta is handy to have along with this.
+" rcs-menu.vim by Jeff Lanzarotta is handy to have along with this (vimscript #41).
 "
 " To Do: add version/diff viewing tools like savevers.vim
 "
 " Changes:
-" 1.2 	option to select the rcs directory,
+" 1.3 	option to select the rcs directory,
 " 		and better comments thanks to Juan Frias
 " 
 if exists("loaded_rcsvers")
