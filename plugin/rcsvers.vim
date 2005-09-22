@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at magma.ca)
 "   Maintainer: Juan Frias (earthdust at comcast.net)
 "
-"  Last Change: $Date: 2005/03/31 09:33:11 $
-"      Version: $Revision: 1.23 $
+"  Last Change: $Date: 2005/09/13 21:04:02 $
+"      Version: $Revision: 1.24 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -41,7 +41,7 @@
 "                               the revision log window)
 "
 "               <Leader>rci     This will create an initial RCS file. Only
-"                               necessary when you have the script set to 
+"                               necessary when you have the script set to
 "                               save only when a previous RCS file exists.
 "
 "               <Leader>older   does a diff with the previous version
@@ -87,15 +87,22 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.24  RCS sets the executable bit on the checked-out file to be the same as 
+"       the rcs archive file.  So if that property changes after you did your 
+"       first checkin, your checked-out file will maintain the original setting.
+"       So now we change the executable mode of the rcs archive file to align
+"       with the current setting of the checked-out copy.
+"       Thanks to Ben Bernard.
+"
 " 1.23  Added an option to fix the path on Cygwin systems.  
 "       See g:rvUseCygPathFiltering  
 "       Thanks to Simon Johann-Günter 
 "
 " 1.22  some re-factoring, and add the option to leave RCS files unlocked when
-"       saving, which is handy for multiple users of the same RCS file.  
+"       saving, which is handy for multiple users of the same RCS file.
 "       See g:rvLeaveRcsUnlocked. (from Roger Pilkey)
 "
-" 1.21  Remember the last position in the rlog window. Rename 
+" 1.21  Remember the last position in the rlog window. Rename
 "       RevisionLog window to avoid collisions. (from Roger Pilkey)
 "
 " 1.20  Added a mapping to create an initial RCS file. Useful when the script
@@ -179,8 +186,8 @@
 "       This is the default key map to display the revision log. Search
 "       for 'key' to override this key.
 "
-" <Leader>rci  
-"       This is the default key map to create an initial RCS file. Search 
+" <Leader>rci
+"       This is the default key map to create an initial RCS file. Search
 "       for 'key' to override this key.
 "
 " <Leader>older
@@ -322,15 +329,15 @@
 "           let g:rvRlogOptions = '-zLT'
 "
 " g:rvLeaveRcsUnlocked
-"       This will leave the RCS file unlocked when saving, so that more than one 
-"       user can use the same RCS backup file. By default, this is off, because 
+"       This will leave the RCS file unlocked when saving, so that more than one
+"       user can use the same RCS backup file. By default, this is off, because
 "       it adds two more system commands on every save, which is slower, and you
 "       probably want to protect your backups from modification by other users
-"       by default, and you shouldn't be using this script for more than personal 
-"       backups anyway, kids.  This is useful though, if for example you want 
-"       to use rcsvers.vim in a global settings file to track file changes.  
-"       Warning: once you turn this option on and save a file, you will lose 
-"       your lock on the RCS file.  So if you turn it off later, rcsvers.vim 
+"       by default, and you shouldn't be using this script for more than personal
+"       backups anyway, kids.  This is useful though, if for example you want
+"       to use rcsvers.vim in a global settings file to track file changes.
+"       Warning: once you turn this option on and save a file, you will lose
+"       your lock on the RCS file.  So if you turn it off later, rcsvers.vim
 "       won't be able to save any more versions until you get a lock again.
 "       e.g.
 "          "unlock RCS backup files when done
@@ -647,10 +654,10 @@ function! s:GetSaveDirectoryName()
             let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
         endif
     else
-        let l:SaveDirectoryName = g:rvSaveDirectoryName
+        return expand(g:rvSaveDirectoryName)
     endif
 
-    return expand(l:SaveDirectoryName)
+    return l:SaveDirectoryName
 endfunction
 
 " Function: Generate suffix {{{1
@@ -776,8 +783,8 @@ function! s:rcsvers(type)
     " -x        Suffix to use for rcs files.
     " -m        Log message
     "
-    " Build the command options	manually, s:GetCommonCmdOpts() isn't quite
-	" right
+    " Build the command options manually, s:GetCommonCmdOpts() isn't quite
+    " right
 
     if (g:rvSaveSuffixType != 0)
         let l:cmdopts = " -x".l:suffix
@@ -792,9 +799,9 @@ function! s:rcsvers(type)
     if (g:rvSaveSuffixType != 0)
         if (g:rvUseCygPathFiltering != 0)
             let l:cygpathrcsfile = substitute(system("cygpath \"".substitute(l:rcsfile,"\\\\","\\\\\\\\","g")."\""),"\\n","","g")
-        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
-		else
-        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+            let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
+        else
+            let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
         endif
     endif
 
@@ -807,6 +814,21 @@ function! s:rcsvers(type)
         " does not exist.
         if a:type == "pre"
             return
+        endif
+    endif
+
+    "check permission changes
+    if has("macunix") || has("unix") || has("win32unix")
+        let l:fullpath = expand("%:p")
+        " Executable file
+        if (executable(l:fullpath) == 1)
+            if (executable(l:rcsfile) == 0)
+                call s:RunCmd("chmod +x " . l:rcsfile)
+            endif
+        else "file has no executable bit
+            if (executable(l:rcsfile) == 1)
+                call s:RunCmd("chmod -x " . l:rcsfile)
+            endif
         endif
     endif
 
@@ -851,7 +873,7 @@ function! s:DisplayLog()
             let l:rvlastlogpos = substitute(getline("."),
                 \"^\\([.0-9]\\+\\).\\+", "\\1", "g")
         else
-            "get the revision from the buffer-variable in the parent 
+            "get the revision from the buffer-variable in the parent
             sil! exec bufwinnr(s:parent_bufnr) . "wincmd w"
             let l:rvlastlogpos = b:rvlastlogpos
         endif
@@ -977,8 +999,8 @@ function! s:NextCompareFiles(direction)
     endif
 
     if (!exists("s:revision"))
-       "no revision available, get the number of the head
-       " Create the command
+        "no revision available, get the number of the head
+        " Create the command
        let l:cmdopts = s:GetCommonCmdOpts()
        if (l:cmdopts == "error")
            return
@@ -1112,17 +1134,17 @@ function! s:GetCommonCmdOpts()
         let l:cmdopts = " -x".l:suffix
     endif
 
-	"some rcs implementations accept two filenames on co (editedfilename +
-	"rcsfilename), some (cygwin) don't.  So only use the rcsfilename.  
-	"however, you do need it above for the rcs and ci commands
+    "some rcs implementations accept two filenames on co (editedfilename +
+    "rcsfilename), some (cygwin) don't.  So only use the rcsfilename.
+    "however, you do need it above for the rcs and ci commands
 
-	"RCS filename
+    "RCS filename
     if (g:rvSaveSuffixType != 0)
         if (g:rvUseCygPathFiltering != 0)
             let l:cygpathrcsfile = substitute(system("cygpath \"".substitute(l:rcsfile,"\\\\","\\\\\\\\","g")."\""),"\\n","","g")
-        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
-		else
-        	let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
+            let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:cygpathrcsfile.g:rvFileQuote
+        else
+            let l:cmdopts = l:cmdopts." ".g:rvFileQuote.l:rcsfile.g:rvFileQuote
         endif
     endif
 
@@ -1137,11 +1159,11 @@ endfunction
 " Default key mappings to generate a revision log, and diff with adjacent
 " versions.
 "------------------------------------------------------------------------------
-nnoremap <silent> <Leader>rlog :call <SID>DisplayLog()<cr>
-nnoremap <silent> <Leader>rci  :call <SID>rcsvers("init")<cr>
+nnoremap <silent> <Leader>rlog  :call <SID>DisplayLog()<cr>
+nnoremap <silent> <Leader>rci   :call <SID>rcsvers("init")<cr>
 
 nnoremap <silent> <Leader>older :call <SID>NextCompareFiles("older")<cr>
 nnoremap <silent> <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
 let &cpo = s:save_cpo
-" vim600:tw=78:fdm=marker:ff=unix:
+" vim600:textwidth=78:foldmethod=marker:fileformat=unix:expandtab:tabstop=4:shiftwidth=4
