@@ -4,8 +4,8 @@
 "  Description: Vim plugin to automatically save backup versions in RCS
 "               whenever a file is saved.
 "
-"       Author: Roger Pilkey (rpilkey at magma.ca)
-"   Maintainer: Juan Frias (earthdust at comcast.net)
+"       Author: Roger Pilkey (rpilkey at gmail.com)
+"   Maintainer: Juan Frias (whiteravenwolf at gmail.com)
 "
 "  Last Change: $Date: 2005/09/13 21:04:02 $
 "      Version: $Revision: 1.24 $
