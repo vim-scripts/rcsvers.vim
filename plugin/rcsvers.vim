@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at gmail.com)
 "   Maintainer: Juan Frias (whiteravenwolf at gmail.com)
 "
-"  Last Change: $Date: 2005/09/13 21:04:02 $
-"      Version: $Revision: 1.24 $
+"  Last Change: $Date: 2005/12/24 21:04:02 $
+"      Version: $Revision: 1.25 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -33,20 +33,24 @@
 "               2. Setup any variables you need in your vimrc file
 "               3. Copy 'rcsvers.vim' to your plugin directory.
 "
-"  Mapped Keys: <Leader>rlog    To access saved revisions log.  This works as
+"  Mapped Keys: <Leader>rlog, or \rlog
+"                               To access the saved revisions log.  This works as
 "                               toggle to quit the revision windows too.
 "
 "               <enter>         This will compare the current file to the
 "                               revision under the cursor (works only in
 "                               the revision log window)
 "
-"               <Leader>rci     This will create an initial RCS file. Only
+"               <Leader>rci, or \rci
+"                               This will create an initial RCS file. Only
 "                               necessary when you have the script set to
 "                               save only when a previous RCS file exists.
 "
-"               <Leader>older   does a diff with the previous version
+"               <Leader>older, or \older   
+"                               does a diff with the previous version
 "
-"               <Leader>newer   does a diff with the next version
+"               <Leader>newer, or \newer
+"                               does a diff with the next version
 "
 " You probably want to map these in your vimrc file to something easier to type,
 " like a function key.  Do it like this:
@@ -61,8 +65,11 @@
 " User name:
 "        LOGNAME=myusername
 "
-" Time zone:  (example is for EST)
-"        TZ=GMT+5
+" Time zone:  
+"        TZ=EST5EDT
+" or (in .vimrc)
+" let $TZ = 'EST5EDT'
+" 
 "
 "------------------------------------------------------------------------------
 " Please send me any bugs you find, so I can keep the script up to date.
@@ -87,6 +94,9 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.25  Fix for Windows if you don't have the TZ variable set, and fix how it
+"       works when saving a file to another name.
+"
 " 1.24  RCS sets the executable bit on the checked-out file to be the same as 
 "       the rcs archive file.  So if that property changes after you did your 
 "       first checkin, your checked-out file will maintain the original setting.
@@ -182,19 +192,19 @@
 " User Options: {{{1
 "------------------------------------------------------------------------------
 "
-" <Leader>rlog
+" <Leader>rlog i.e. \rlog
 "       This is the default key map to display the revision log. Search
 "       for 'key' to override this key.
 "
-" <Leader>rci
+" <Leader>rci i.e. \rci
 "       This is the default key map to create an initial RCS file. Search
 "       for 'key' to override this key.
 "
-" <Leader>older
+" <Leader>older i.e. \older
 "       This is the default key map to display the previous revision. Search
 "       for 'key' to override this key.
 "
-" <Leader>newer
+" <Leader>newer i.e. \newer
 "       This is the default key map to display the next revision. Search
 "       for 'key' to override this key.
 "
@@ -428,6 +438,16 @@ if !exists('g:rvCiOptions')
     let g:rvCiOptions = ""
 endif
 
+" Set TZ to something if it isn't set. Otherwise the rcs commands error out
+" cryptically. This helps in making a plug and play install on Windows
+"------------------------------------------------------------------------------
+if $TZ == '' && ( has("win32") || has("win16") || has("dos32") )
+    " put a copy of this line with your timezone setting into your .vimrc to
+    " localize your rlog times
+    "let $TZ = 'EST5EDT'
+    let $TZ = 'GMT'
+endif
+"
 " Set additional rlog options
 "------------------------------------------------------------------------------
 if !exists('g:rvRlogOptions')
@@ -513,6 +533,7 @@ endif
 " Set where the files are saved
 "------------------------------------------------------------------------------
 if !exists('g:rvSaveDirectoryType')
+"   0 = Save in current directory (under RCS)
     let g:rvSaveDirectoryType = 0
 endif
 
@@ -531,9 +552,13 @@ endif
 " Set the suffix type
 "------------------------------------------------------------------------------
 if !exists('g:rvSaveSuffixType')
+"   0 = Save in current directory (under RCS)
     if g:rvSaveDirectoryType == 0
+"       1 = Use the standard ',v' suffix
         let g:rvSaveSuffixType = 1
     else
+"           2 = Use a unique suffix (take the full path and changes the
+"               directory separators to underscores)
         let g:rvSaveSuffixType = 2
     endif
 endif
@@ -641,17 +666,20 @@ endfunction
 
 " Function: Set the name of the directory to save RCS files to {{{1
 "------------------------------------------------------------------------------
-function! s:GetSaveDirectoryName()
-
+function! s:GetSaveDirectoryName(filename)
     if !exists('g:rvSaveDirectoryName')
         if g:rvSaveDirectoryType == 0
-            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator."RCS".g:rvDirSeparator
+           " 0 = Save in current directory (under RCS)
+            let l:SaveDirectoryName = expand(fnamemodify(a:filename, ":p:h")).g:rvDirSeparator."RCS".g:rvDirSeparator
 
         elseif g:rvSaveDirectoryType == 1
+           " 1 = Single directory for all files
             let l:SaveDirectoryName = $VIM.g:rvDirSeparator."RCSFiles".g:rvDirSeparator
 
-        else " Type 2
-            let l:SaveDirectoryName = expand("%:p:h").g:rvDirSeparator
+        else 
+            " Type 2, save right here in the same directory (make sure you set
+            "g:rvSaveSuffixType, or you will overwrite your file!)
+            let l:SaveDirectoryName = expand(fnamemodify(a:filename, ":p:h")).g:rvDirSeparator
         endif
     else
         return expand(g:rvSaveDirectoryName)
@@ -662,7 +690,7 @@ endfunction
 
 " Function: Generate suffix {{{1
 "------------------------------------------------------------------------------
-function! s:CreateSuffix()
+function! s:CreateSuffix(filename)
     if g:rvSaveSuffixType == 0
         return ""
 
@@ -672,11 +700,11 @@ function! s:CreateSuffix()
 
     elseif g:rvSaveSuffixType == 2
         "2 = Use a unique suffix
-        return ",".expand("%:p:h:gs?\[:/ \\\\]?_?")
+        return ",".expand(fnamemodify(a:filename, ":p:h:gs?\[:/ \\\\]?_?"))
 
     elseif g:rvSaveSuffixType == 3
         "3 = use a unique suffix with a ',v' appended to the end.
-        return ",".expand("%:p:h:gs?\[:/ \\\\]?_?").",v"
+        return ",".expand(fnamemodify(a:filename, ":p:h:gs?\[:/ \\\\]?_?")).",v"
 
     elseif g:rvSaveSuffixType == 4
         "4 = User defined
@@ -692,37 +720,37 @@ function! s:rcsvers(type)
 
     " If this is a new file that hasn't been saved then we
     " can't create a check in entry.
-    if a:type =="init" && !filereadable(expand("%:p")) && !exists("modified")
+    if a:type =="init" && !filereadable( expand("<afile>:p")) && !exists("modified")
         echo "(rcsvers.vim) You need to save the file first!"
         return
     endif
 
     " If this is a new file that hasn't been saved then we
     " can't create a previous entry so just exit.
-    if a:type == "pre" && !filereadable(expand("%:p")) && !exists("modified")
+    if a:type == "pre" && !filereadable( expand("<afile>:p")) && !exists("modified")
         return
     endif
 
     " Exclude directories from versioning, by putting skip file there.
-    if filereadable( expand("%:p:h").g:rvDirSeparator.g:rvSkipVimRcsFileName )
+    if filereadable( expand("<afile>:p:h").g:rvDirSeparator.g:rvSkipVimRcsFileName )
         return
     endif
 
-    " Exclude file from versioning if matches exclude expression.
+    " Exclude file from versioning if it matches the exclude expression.
     if 0 != strlen(g:rvExcludeExpression) &&
-            \ -1 != match(expand("%:p"), g:rvExcludeExpression)
+            \ -1 != match(expand("<afile>:p"), g:rvExcludeExpression)
         return
     endif
 
-    " Include file for versioning if matches include expression.
+    " Include file for versioning if it matches the include expression.
     if 0 != strlen(g:rvIncludeExpression) &&
-            \ -1 == match(expand("%:p"), g:rvIncludeExpression)
+            \ -1 == match(expand("<afile>:p"), g:rvIncludeExpression)
         return
     endif
 
-    let l:suffix = s:CreateSuffix()
+    let l:suffix = s:CreateSuffix(expand("<afile>:p"))
 
-    let l:SaveDirectoryName = s:GetSaveDirectoryName()
+    let l:SaveDirectoryName = s:GetSaveDirectoryName(expand("<afile>:p"))
 
     " Should we only save if RCS directory exists?
     if (g:rvSaveIfRCSExists == 1) && (g:rvSaveDirectoryType != 1) &&
@@ -739,7 +767,7 @@ function! s:rcsvers(type)
     endif
 
     " Generate name of RCS file
-    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+    let l:rcsfile = l:SaveDirectoryName.expand("<afile>:t").l:suffix
 
     " Should we only save if RCS file exists?
     if a:type != "init" && (g:rvSaveIfPreviousRCSFileExists == 1) && (getfsize(l:rcsfile) == -1)
@@ -790,7 +818,7 @@ function! s:rcsvers(type)
         let l:cmdopts = " -x".l:suffix
     endif
 
-    let l:editedfilename = bufname("%")
+    let l:editedfilename = expand("<afile>:p")
     if (g:rvUseCygPathFiltering != 0)
         let l:editedfilename = substitute(system("cygpath \"".l:editedfilename."\""),"\\n","","g")
     endif
@@ -819,7 +847,7 @@ function! s:rcsvers(type)
 
     "check permission changes
     if has("macunix") || has("unix") || has("win32unix")
-        let l:fullpath = expand("%:p")
+        let l:fullpath = expand("<afile>:p")
         " Executable file
         if (executable(l:fullpath) == 1)
             if (executable(l:rcsfile) == 0)
@@ -887,7 +915,7 @@ function! s:DisplayLog()
     let l:savedir = expand("%:p:h")
 
     " Create the command
-    let l:cmdopts = s:GetCommonCmdOpts()
+    let l:cmdopts = s:GetCommonCmdOpts(expand("%:p"))
     if (l:cmdopts == "error")
         return
     endif
@@ -1001,7 +1029,7 @@ function! s:NextCompareFiles(direction)
     if (!exists("s:revision"))
         "no revision available, get the number of the head
         " Create the command
-       let l:cmdopts = s:GetCommonCmdOpts()
+       let l:cmdopts = s:GetCommonCmdOpts(expand("%:p"))
        if (l:cmdopts == "error")
            return
        endif
@@ -1052,7 +1080,7 @@ function! s:CompareFiles(revision)
     "             This allows us to capture it with the r! command.
     " -r        Revision number to check out.
 
-    let l:cmdopts = s:GetCommonCmdOpts()
+    let l:cmdopts = s:GetCommonCmdOpts(expand("%:p"))
     if (l:cmdopts == "error")
         return
     endif
@@ -1117,11 +1145,11 @@ function! s:CompareFiles(revision)
 endfunction
 "}}}
 " Function: set up the common commandline options {{{1
-function! s:GetCommonCmdOpts()
+function! s:GetCommonCmdOpts(filename)
     " Build the command options
-    let l:suffix = s:CreateSuffix()
-
-    let l:rcsfile = s:GetSaveDirectoryName().expand("%:p:t").l:suffix
+    let l:suffix = s:CreateSuffix(expand(a:filename))
+    
+    let l:rcsfile = s:GetSaveDirectoryName(fnamemodify(a:filename, ":p")).fnamemodify(a:filename, ":t").l:suffix
 
     " Check for an RCS file
     if (getfsize(l:rcsfile) == -1)
