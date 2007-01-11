@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at gmail.com)
 "   Maintainer: Juan Frias (whiteravenwolf at gmail.com)
 "
-"  Last Change: $Date: 2005/12/24 21:04:02 $
-"      Version: $Revision: 1.25 $
+"  Last Change: $Date: 2007/01/02 12:34:56 $
+"      Version: $Revision: 1.26 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -64,6 +64,13 @@
 "
 " User name:
 "        LOGNAME=myusername
+" 
+" Windows note: usually RCS will pick up the USERNAME variable, but usernames with 
+" spaces will cause a weird RCS error, so set LOGNAME to something without
+" spaces to override it  
+" e.g.
+" (in .vimrc)
+" let $LOGNAME = 'MyNameAllStrungTogether'
 "
 " Time zone:  
 "        TZ=EST5EDT
@@ -94,6 +101,9 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.26  Fix for Windows for usernames with spaces (from Roger), and macosx directory
+"       separator (thanks to Jeff Fox)
+"
 " 1.25  Fix for Windows if you don't have the TZ variable set, and fix how it
 "       works when saving a file to another name.
 "
@@ -438,6 +448,16 @@ if !exists('g:rvCiOptions')
     let g:rvCiOptions = ""
 endif
 
+" RCS tries to use the LOGNAME, then USERNAME environment variables as the 'author' 
+" string, but it doesn't handle it when they have spaces, so strip them out. 
+" You can set LOGNAME to something else in your _vimrc file if you like like
+" this:
+" let $LOGNAME = 'MyFunkyUserName'
+"------------------------------------------------------------------------------
+if $LOGNAME == '' && ( has("win32") || has("win16") || has("dos32") )
+    let $LOGNAME = substitute($USERNAME, " ", "", "g")
+endif
+
 " Set TZ to something if it isn't set. Otherwise the rcs commands error out
 " cryptically. This helps in making a plug and play install on Windows
 "------------------------------------------------------------------------------
@@ -447,6 +467,7 @@ if $TZ == '' && ( has("win32") || has("win16") || has("dos32") )
     "let $TZ = 'EST5EDT'
     let $TZ = 'GMT'
 endif
+
 "
 " Set additional rlog options
 "------------------------------------------------------------------------------
@@ -493,6 +514,9 @@ if !exists('g:rvDirSeparator')
     if has("win32") || has("win16") || has("dos32")
                 \ || has("dos16") || has("os2")
         let g:rvDirSeparator = "\\"
+
+    elseif has("macunix")
+        let g:rvDirSeparator = "\/"
 
     elseif has("mac")
         let g:rvDirSeparator = ":"
