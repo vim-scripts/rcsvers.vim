@@ -7,8 +7,8 @@
 "       Author: Roger Pilkey (rpilkey at gmail.com)
 "   Maintainer: Juan Frias (whiteravenwolf at gmail.com)
 "
-"  Last Change: $Date: 2007/01/02 12:34:56 $
-"      Version: $Revision: 1.26 $
+"  Last Change: $Date: 2007/04/17 12:34:56 $
+"      Version: $Revision: 1.27 $
 "
 "    Copyright: Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this header
@@ -101,6 +101,9 @@
 "
 " History: {{{1
 "------------------------------------------------------------------------------
+" 1.27  Add a new mode for revising (never/ask/always) and fix rlog window width,
+"       both thanks to Callum Gibson.  See g:rvMode
+"
 " 1.26  Fix for Windows for usernames with spaces (from Roger), and macosx directory
 "       separator (thanks to Jeff Fox)
 "
@@ -376,6 +379,14 @@
 "           let g:rvDescription = <description>
 "       in your vimrc file.
 "
+" g:rvMode
+"       This allows you to set the mode in which the plugin operates. If set
+"       to 0, it won't attempt to make any revisions. If set to 1, will
+"       always create a revision, subject to the other relevant settings
+"       such as rvSaveIfRCSExists, etc. If set to 2, it will ask before
+"       creating a backup revision with the default of No, and if set to 3 it
+"       will ask but with a default of Yes.
+"
 " g:rvDescMsgPrompt
 "       This determines if you will be prompted for a description or a checkin
 "       message when you save the file. Default is no prompt. To have the
@@ -494,6 +505,12 @@ if !exists('g:rvDescription')
 else
     "quote out any quote chars in the description
     let g:rvDescription= substitute(g:rvDescription,'"','\\"',"g")
+endif
+
+" Set default for mode
+"------------------------------------------------------------------------------
+if !exists('g:rvMode')
+    let g:rvMode = 1
 endif
 
 " Set default for description/message prompt
@@ -742,6 +759,11 @@ endfunction
 "------------------------------------------------------------------------------
 function! s:rcsvers(type)
 
+    " Should we make a revision at all? We may ask the user's opinion below
+    if g:rvMode == 0
+        return
+    endif
+
     " If this is a new file that hasn't been saved then we
     " can't create a check in entry.
     if a:type =="init" && !filereadable( expand("<afile>:p")) && !exists("modified")
@@ -780,6 +802,21 @@ function! s:rcsvers(type)
     if (g:rvSaveIfRCSExists == 1) && (g:rvSaveDirectoryType != 1) &&
      \ (g:rvSaveDirectoryType != 2) && (!isdirectory(l:SaveDirectoryName))
         return
+    endif
+
+    " Ask if we want a revision, only on "post"
+    if a:type == "post"
+        if g:rvMode == 2
+            let l:answer = input("(rcsvers.vim) Make revision? (y/[N]): ")
+            if (l:answer != "y" && l:answer != "Y")
+                return
+            endif
+        elseif g:rvMode == 3
+            let l:answer = input("(rcsvers.vim) Make revision? ([Y]/n): ")
+            if (l:answer == "n" || l:answer == "N")
+                return
+            endif
+        endif
     endif
 
     " Create RCS dir if it doesn't exist
@@ -957,7 +994,11 @@ function! s:DisplayLog()
 
     " Create a new buffer (vertical split).
     sil exe 'vnew ' l:bufferName
+    if g:rvShowUser > 0
+        sil exe 'vertical resize 45'
+    else
     sil exe 'vertical resize 35'
+    endif
     let s:child_bufnr =  bufnr("%")
 
     " Map <enter> to compare current file to that version
@@ -1219,3 +1260,4 @@ nnoremap <silent> <Leader>newer :call <SID>NextCompareFiles("newer")<cr>
 
 let &cpo = s:save_cpo
 " vim600:textwidth=78:foldmethod=marker:fileformat=unix:expandtab:tabstop=4:shiftwidth=4
+
