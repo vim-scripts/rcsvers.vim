@@ -924,11 +924,11 @@ function! s:Rcsvers(filename, type)
         " Executable file
         if (executable(l:fullpath) == 1)
             if (executable(l:rcsfile) == 0)
-                call s:RunCmd("chmod +x " . l:rcsfile)
+                call s:RunCmd("chmod +x ".g:rvFileQuote.l:rcsfile.g:rvFileQuote)
             endif
         else "file has no executable bit
             if (executable(l:rcsfile) == 1)
-                call s:RunCmd("chmod -x " . l:rcsfile)
+                call s:RunCmd("chmod -x ".g:rvFileQuote.l:rcsfile.g:rvFileQuote)
             endif
         endif
     endif
